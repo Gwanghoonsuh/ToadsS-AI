@@ -30,23 +30,35 @@ class GoogleCloudService {
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
 
-        // Google Cloud 클라이언트를 완전히 자동 인증으로 초기화
-        // credentials나 keyFilename 옵션을 전혀 사용하지 않음
-        this.storage = new Storage();
+        // 파싱된 서비스 계정 키를 직접 credentials로 전달
+        const credentials = serviceAccountKey;
+        
+        this.storage = new Storage({
+            credentials: credentials,
+            projectId: this.projectId
+        });
 
         if (VertexAI) {
             this.vertexAI = new VertexAI({
                 project: this.projectId,
-                location: this.region
+                location: this.region,
+                googleAuthOptions: {
+                    credentials: credentials
+                }
             });
         }
 
         if (DocumentServiceClient) {
-            this.documentClient = new DocumentServiceClient();
+            this.documentClient = new DocumentServiceClient({
+                credentials: credentials,
+                projectId: this.projectId
+            });
         }
 
         this.predictionClient = new PredictionServiceClient({
             apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
+            credentials: credentials,
+            projectId: this.projectId
         });
 
         console.log('✅ All Google Cloud clients initialized with complete auto auth.');
