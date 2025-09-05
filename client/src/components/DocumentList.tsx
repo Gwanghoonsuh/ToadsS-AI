@@ -31,39 +31,42 @@ const DocumentList: React.FC<DocumentListProps> = ({
             return '날짜 정보 없음';
         }
     };
-    const getFileIcon = (contentType: string) => {
-        if (contentType.includes('pdf')) {
+    const getFileIcon = (contentType?: string, fileName?: string) => {
+        const type = contentType || fileName || '';
+        if (type.includes('pdf') || fileName?.toLowerCase().endsWith('.pdf')) {
             return '📄';
-        } else if (contentType.includes('word') || contentType.includes('document')) {
+        } else if (type.includes('word') || type.includes('document') || fileName?.toLowerCase().match(/\.(doc|docx)$/)) {
             return '📝';
-        } else if (contentType.includes('image')) {
+        } else if (type.includes('image') || fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp)$/)) {
             return '🖼️';
-        } else if (contentType.includes('text')) {
+        } else if (type.includes('text') || fileName?.toLowerCase().endsWith('.txt')) {
             return '📃';
         } else {
             return '📄';
         }
     };
 
-    const getFileTypeColor = (contentType: string) => {
-        if (contentType.includes('pdf')) {
+    const getFileTypeColor = (contentType?: string, fileName?: string) => {
+        const type = contentType || fileName || '';
+        if (type.includes('pdf') || fileName?.toLowerCase().endsWith('.pdf')) {
             return 'bg-red-100 text-red-800';
-        } else if (contentType.includes('word') || contentType.includes('document')) {
+        } else if (type.includes('word') || type.includes('document') || fileName?.toLowerCase().match(/\.(doc|docx)$/)) {
             return 'bg-blue-100 text-blue-800';
-        } else if (contentType.includes('image')) {
+        } else if (type.includes('image') || fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp)$/)) {
             return 'bg-green-100 text-green-800';
-        } else if (contentType.includes('text')) {
+        } else if (type.includes('text') || fileName?.toLowerCase().endsWith('.txt')) {
             return 'bg-gray-100 text-gray-800';
         } else {
             return 'bg-gray-100 text-gray-800';
         }
     };
 
-    const getFileTypeName = (contentType: string) => {
-        if (contentType.includes('pdf')) return 'PDF';
-        if (contentType.includes('word')) return 'Word';
-        if (contentType.includes('image')) return 'Image';
-        if (contentType.includes('text')) return 'Text';
+    const getFileTypeName = (contentType?: string, fileName?: string) => {
+        const type = contentType || fileName || '';
+        if (type.includes('pdf') || fileName?.toLowerCase().endsWith('.pdf')) return 'PDF';
+        if (type.includes('word') || fileName?.toLowerCase().match(/\.(doc|docx)$/)) return 'Word';
+        if (type.includes('image') || fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp)$/)) return 'Image';
+        if (type.includes('text') || fileName?.toLowerCase().endsWith('.txt')) return 'Text';
         return 'Document';
     };
 
@@ -78,7 +81,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                         {/* File Icon */}
                         <div className="flex-shrink-0">
                             <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                                <span className="text-2xl">{getFileIcon(document.contentType)}</span>
+                                <span className="text-2xl">{getFileIcon(document.contentType, document.name)}</span>
                             </div>
                         </div>
 
@@ -88,8 +91,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
                                 <h3 className="text-sm font-medium text-gray-900 truncate">
                                     {document.name}
                                 </h3>
-                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getFileTypeColor(document.contentType)}`}>
-                                    {getFileTypeName(document.contentType)}
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getFileTypeColor(document.contentType, document.name)}`}>
+                                    {getFileTypeName(document.contentType, document.name)}
                                 </span>
                             </div>
 

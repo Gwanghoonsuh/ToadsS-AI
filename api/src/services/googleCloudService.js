@@ -111,7 +111,8 @@ class GoogleCloudService {
                 name: file.name,
                 size: file.metadata.size,
                 created: file.metadata.timeCreated,
-                updated: file.metadata.updated
+                updated: file.metadata.updated,
+                contentType: file.metadata.contentType
             }));
         } catch (error) {
             console.error(`❌ Error listing files for customer ${customerId}:`, error);
