@@ -18,15 +18,15 @@ router.get('/', authenticateToken, requireCustomerId, async (req, res, next) => 
         console.log(`Found ${documents.length} documents for customer ${customerId}`);
 
         const formattedDocuments = documents.map(doc => {
-            // 타임스탬프를 고유 ID로 추출
-            const timestampMatch = doc.storedName.match(/(\d+)-[a-z0-9]+-/);
-            const uniqueId = timestampMatch ? timestampMatch[1] : doc.storedName;
+            // 타임스탬프를 고유 ID로 추출 (name 속성에서 추출)
+            const timestampMatch = doc.name ? doc.name.match(/(\d+)-[a-z0-9]+-/) : null;
+            const uniqueId = timestampMatch ? timestampMatch[1] : (doc.name || 'unknown');
 
             return {
                 id: uniqueId, // Use timestamp as unique ID for download
-                name: doc.name, // Use original name for display
-                size: doc.size,
-                uploadedAt: doc.timeCreated || new Date().toISOString(), // Use timeCreated or fallback
+                name: doc.name || 'Unknown File', // Use stored name for display
+                size: doc.size || 0,
+                uploadedAt: doc.created || new Date().toISOString(), // Use created or fallback
                 contentType: doc.contentType,
                 sizeFormatted: formatFileSize(doc.size),
                 storedName: doc.storedName // Keep stored name for reference
