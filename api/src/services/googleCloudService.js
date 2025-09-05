@@ -183,8 +183,68 @@ class GoogleCloudService {
     }
 
     async generateAIResponse(query, context, customerId) {
-        // 간단한 AI 응답 생성
-        return "AI 응답이 생성되었습니다.";
+        try {
+            if (!VertexAI) {
+                console.log('⚠️ Vertex AI not available, using mock response');
+                return {
+                    response: "죄송하지만 현재 AI 서비스를 이용할 수 없습니다. 나중에 다시 시도해주세요.",
+                    mock: true
+                };
+            }
+
+            // 고객사 정보 (실제 구현에서는 DB에서 조회)
+            const customerName = `고객사-${customerId}`;
+            
+            // 시스템 프롬프트 생성
+            const systemPrompt = generateSystemPrompt(customerName, context, query);
+            
+            // Vertex AI Gemini 모델 사용
+            const model = this.vertexAI.preview.getGenerativeModel({
+                model: "gemini-1.5-pro-preview-0409",
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }],
+                    role: "system"
+                },
+                generationConfig: {
+                    maxOutputTokens: 2048,
+                    temperature: 0.2, // 전문적이고 일관된 답변을 위한 낮은 temperature
+                    topP: 0.8,
+                }
+            });
+
+            console.log(`🤖 Generating AI response for customer ${customerId}`);
+            console.log(`📝 Query: ${query}`);
+            console.log(`📚 Context length: ${context.length} characters`);
+
+            // AI 응답 생성
+            const result = await model.generateContent({
+                contents: [
+                    {
+                        role: "user",
+                        parts: [{ text: query }]
+                    }
+                ]
+            });
+
+            const aiResponse = result.response.candidates[0].content.parts[0].text;
+            
+            console.log(`✅ AI response generated successfully`);
+            return {
+                response: aiResponse,
+                customerName: customerName,
+                contextUsed: context.length > 0
+            };
+
+        } catch (error) {
+            console.error(`❌ Error generating AI response:`, error);
+            
+            // 실패 시 fallback 응답
+            return {
+                response: "죄송하지만 현재 기술적인 문제로 답변을 생성할 수 없습니다. 잠시 후 다시 시도해주세요.",
+                error: error.message,
+                fallback: true
+            };
+        }
     }
 
     async addDocumentToDataStore(customerId, gcsUri, fileName) {

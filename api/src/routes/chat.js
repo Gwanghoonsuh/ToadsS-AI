@@ -33,41 +33,45 @@ router.post('/', authenticateToken, requireCustomerId, async (req, res, next) =>
             maxResults
         );
 
-        if (searchResults.length === 0) {
-            return res.json({
-                success: true,
-                answer: '죄송합니다. 관련 문서를 찾을 수 없습니다. 문서 관리 페이지에서 관련 문서를 업로드해 주세요.',
-                references: [],
-                searchResults: []
-            });
-        }
+        // 검색 결과를 컨텍스트로 변환
+        const context = searchResults.length > 0 
+            ? searchResults.map(result => `${result.title}: ${result.content}`).join('\n\n')
+            : '';
 
-        // Generate AI response with company name
-        const companyName = req.user.companyName || '토즈';
-        const aiResponse = await googleCloudService.generateAIResponse(
+        // Generate AI response (문서가 없어도 AI가 적절히 답변)
+        const aiResult = await googleCloudService.generateAIResponse(
             query,
-            searchResults,
-            customerId,
-            companyName
+            context,
+            customerId
         );
 
-        // Extract references from search results
+        // 검색 결과가 없을 때 특별 처리
+        if (searchResults.length === 0 && !aiResult.mock && !aiResult.fallback) {
+            // AI가 문서 없음을 인지하고 적절한 답변을 생성
+            console.log(`No documents found for customer ${customerId} query: ${query}`);
+        }
+
+        // Extract references from search results (내부 점수 정보 제거)
         const references = searchResults.map((result, index) => ({
             id: index + 1,
-            name: result.title,
-            uri: result.uri,
-            score: result.score
+            name: result.title || `문서 ${index + 1}`,
+            uri: result.uri
         }));
 
         res.json({
             success: true,
-            answer: aiResponse,
+            answer: aiResult.response,
             references,
             searchResults: searchResults.map(result => ({
                 title: result.title,
-                content: result.content.substring(0, 200) + '...',
-                score: result.score
-            }))
+                content: result.content ? result.content.substring(0, 200) + '...' : '내용 없음'
+            })),
+            metadata: {
+                contextUsed: aiResult.contextUsed || false,
+                customerName: aiResult.customerName,
+                mock: aiResult.mock || false,
+                fallback: aiResult.fallback || false
+            }
         });
 
     } catch (error) {
