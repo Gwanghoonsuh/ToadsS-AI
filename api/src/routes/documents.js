@@ -18,18 +18,28 @@ router.get('/', authenticateToken, requireCustomerId, async (req, res, next) => 
         console.log(`Found ${documents.length} documents for customer ${customerId}`);
 
         const formattedDocuments = documents.map(doc => {
-            // 타임스탬프를 고유 ID로 추출 (name 속성에서 추출)
-            const timestampMatch = doc.name ? doc.name.match(/(\d+)-[a-z0-9]+-/) : null;
+            // 타임스탬프를 고유 ID로 추출 (customer-1/timestamp-random-filename 형태)
+            const timestampMatch = doc.name ? doc.name.match(/customer-\d+\/(\d+)-[a-z0-9]+-/) : null;
             const uniqueId = timestampMatch ? timestampMatch[1] : (doc.name || 'unknown');
+            
+            // 원본 파일명 표시 (originalName이 있으면 사용, 없으면 파일명에서 추출)
+            let displayName = doc.originalName || doc.name || 'Unknown File';
+            if (!doc.originalName && doc.name) {
+                // customer-1/timestamp-random-originalname.ext 형태에서 원본명 추출
+                const nameMatch = doc.name.match(/customer-\d+\/\d+-[a-z0-9]+-(.+)$/);
+                if (nameMatch) {
+                    displayName = nameMatch[1];
+                }
+            }
 
             return {
                 id: uniqueId, // Use timestamp as unique ID for download
-                name: doc.name || 'Unknown File', // Use stored name for display
+                name: displayName, // Use original name for display
                 size: doc.size || 0,
                 uploadedAt: doc.created || new Date().toISOString(), // Use created or fallback
                 contentType: doc.contentType,
                 sizeFormatted: formatFileSize(doc.size),
-                storedName: doc.storedName // Keep stored name for reference
+                storedName: doc.name // Keep stored name for reference
             };
         });
 
@@ -179,20 +189,21 @@ router.delete('/:id', authenticateToken, requireCustomerId, async (req, res, nex
 
         // Get file from Google Cloud Storage
         const bucket = await googleCloudService.getCustomerBucket(customerId);
+        const customerFolder = `customer-${customerId}/`;
         
-        // 전체 버킷에서 파일 검색 (prefix 없이)
-        const [allFiles] = await bucket.getFiles();
-        console.log(`🔍 Found ${allFiles.length} total files in bucket`);
+        // 고객별 폴더에서만 파일 검색 (데이터 격리)
+        const [customerFiles] = await bucket.getFiles({ prefix: customerFolder });
+        console.log(`🔍 Found ${customerFiles.length} files in customer ${customerId} folder`);
         
         // 파일 구조 디버깅
-        allFiles.forEach((file, index) => {
+        customerFiles.forEach((file, index) => {
             console.log(`File ${index}: ${file.name}`);
         });
 
         // Find file that starts with the timestamp
-        const targetFile = allFiles.find(file => {
-            // 파일명에서 타임스탬프 추출
-            const match = file.name.match(/(\d+)-[a-z0-9]+-/);
+        const targetFile = customerFiles.find(file => {
+            // 파일명에서 타임스탬프 추출 (customer-1/timestamp-random-filename 형태)
+            const match = file.name.match(/customer-\d+\/(\d+)-[a-z0-9]+-/);
             const timestamp = match ? match[1] : null;
             return timestamp === documentId;
         });

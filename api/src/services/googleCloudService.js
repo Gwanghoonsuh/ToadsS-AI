@@ -105,14 +105,19 @@ class GoogleCloudService {
     async listFiles(customerId) {
         try {
             const bucket = await this.getCustomerBucket(customerId);
-            const [files] = await bucket.getFiles();
+            const customerFolder = `customer-${customerId}/`;
+            
+            // 고객별 폴더에서만 파일 조회 (데이터 격리)
+            const [files] = await bucket.getFiles({ prefix: customerFolder });
 
             return files.map(file => ({
                 name: file.name,
                 size: file.metadata.size,
                 created: file.metadata.timeCreated,
                 updated: file.metadata.updated,
-                contentType: file.metadata.contentType
+                contentType: file.metadata.contentType,
+                originalName: file.metadata.originalName,
+                customerId: file.metadata.customerId
             }));
         } catch (error) {
             console.error(`❌ Error listing files for customer ${customerId}:`, error);
@@ -123,24 +128,52 @@ class GoogleCloudService {
     async uploadFile(customerId, file, originalName) {
         try {
             const bucket = await this.getCustomerBucket(customerId);
-            const fileName = `${Date.now()}-${originalName}`;
+            
+            // 고객별 폴더 구조 생성: customer-{customerId}/timestamp-randomstring-filename
+            const timestamp = Date.now();
+            const randomString = Math.random().toString(36).substring(2, 8);
+            const customerFolder = `customer-${customerId}`;
+            const fileName = `${customerFolder}/${timestamp}-${randomString}-${originalName}`;
             const fileUpload = bucket.file(fileName);
 
             await fileUpload.save(file.buffer, {
                 metadata: {
                     contentType: file.mimetype,
-                    originalName: originalName
+                    originalName: originalName,
+                    customerId: customerId.toString(),
+                    uploadTimestamp: timestamp.toString()
                 }
             });
 
             console.log(`✅ File uploaded: ${fileName}`);
             return {
                 fileName,
-                gcsUri: `gs://${bucket.name}/${fileName}`
+                gcsUri: `gs://${bucket.name}/${fileName}`,
+                timestamp,
+                customerFolder
             };
         } catch (error) {
             console.error(`❌ Error uploading file ${originalName}:`, error);
             throw new Error(`Failed to upload file: ${error.message}`);
+        }
+    }
+
+    async deleteFile(customerId, fileName) {
+        try {
+            const bucket = await this.getCustomerBucket(customerId);
+            const file = bucket.file(fileName);
+            
+            // 파일이 해당 고객의 폴더에 있는지 확인 (보안)
+            if (!fileName.startsWith(`customer-${customerId}/`)) {
+                throw new Error(`Access denied: File does not belong to customer ${customerId}`);
+            }
+            
+            await file.delete();
+            console.log(`✅ File deleted: ${fileName}`);
+            return { success: true, fileName };
+        } catch (error) {
+            console.error(`❌ Error deleting file ${fileName}:`, error);
+            throw new Error(`Failed to delete file: ${error.message}`);
         }
     }
 
