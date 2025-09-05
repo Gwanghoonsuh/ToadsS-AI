@@ -179,14 +179,23 @@ router.delete('/:id', authenticateToken, requireCustomerId, async (req, res, nex
 
         // Get file from Google Cloud Storage
         const bucket = await googleCloudService.getCustomerBucket(customerId);
-        const customerFolder = `customer-${customerId}`;
+        
+        // 전체 버킷에서 파일 검색 (prefix 없이)
+        const [allFiles] = await bucket.getFiles();
+        console.log(`🔍 Found ${allFiles.length} total files in bucket`);
+        
+        // 파일 구조 디버깅
+        allFiles.forEach((file, index) => {
+            console.log(`File ${index}: ${file.name}`);
+        });
 
-        // Find file by timestamp (unique ID)
-        const [files] = await bucket.getFiles({ prefix: customerFolder });
-        console.log(`🔍 Found ${files.length} files in customer folder`);
-
-        // Find file that contains the timestamp
-        const targetFile = files.find(file => file.name.includes(documentId));
+        // Find file that starts with the timestamp
+        const targetFile = allFiles.find(file => {
+            // 파일명에서 타임스탬프 추출
+            const match = file.name.match(/(\d+)-[a-z0-9]+-/);
+            const timestamp = match ? match[1] : null;
+            return timestamp === documentId;
+        });
 
         if (!targetFile) {
             console.error(`❌ Document not found for deletion ID: ${documentId}`);
