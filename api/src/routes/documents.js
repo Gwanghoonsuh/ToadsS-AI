@@ -219,11 +219,12 @@ router.delete('/:id', authenticateToken, requireCustomerId, async (req, res, nex
         await googleCloudService.deleteFile(customerId, targetFile.name);
 
         // Remove from Discovery Engine data store
-        await googleCloudService.removeDocumentFromDataStore(customerId, targetFile.name);
+        const dataStoreResult = await googleCloudService.removeDocumentFromDataStore(customerId, targetFile.name);
 
         res.json({
             success: true,
-            message: '문서가 성공적으로 삭제되었습니다.'
+            message: '문서가 성공적으로 삭제되었습니다.',
+            warning: dataStoreResult.warning || null
         });
     } catch (error) {
         console.error('Error deleting document:', error);

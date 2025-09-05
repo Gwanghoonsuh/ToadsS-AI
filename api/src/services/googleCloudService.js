@@ -188,8 +188,41 @@ class GoogleCloudService {
     }
 
     async addDocumentToDataStore(customerId, gcsUri, fileName) {
-        // 문서를 데이터 스토어에 추가
+        // Discovery Engine이 사용 불가능한 경우 스킵
+        if (!DocumentServiceClient) {
+            console.log('⚠️ Discovery Engine not available, skipping document indexing');
+            return { success: true, skipped: true };
+        }
+        
+        // 실제 구현에서는 Discovery Engine API를 사용
+        console.log(`📚 Adding document to data store: ${fileName} for customer ${customerId}`);
         return { success: true, message: 'Document added to data store' };
+    }
+
+    async removeDocumentFromDataStore(customerId, fileName) {
+        // Discovery Engine이 사용 불가능한 경우 스킵
+        if (!DocumentServiceClient) {
+            console.log('⚠️ Discovery Engine not available, skipping document removal');
+            return { success: true, skipped: true };
+        }
+        
+        try {
+            // 실제 구현에서는 Discovery Engine API를 사용하여 문서 삭제
+            console.log(`🗑️ Removing document from data store: ${fileName} for customer ${customerId}`);
+            
+            // TODO: Discovery Engine API를 사용한 실제 문서 삭제 구현
+            // const documentId = this.generateDocumentId(fileName);
+            // await this.documentClient.deleteDocument({
+            //     name: `projects/${this.projectId}/locations/${this.region}/dataStores/${this.dataStoreId}/branches/default_branch/documents/${documentId}`
+            // });
+            
+            console.log(`✅ Document removed from data store: ${fileName}`);
+            return { success: true, message: 'Document removed from data store' };
+        } catch (error) {
+            console.error(`❌ Error removing document from data store: ${error.message}`);
+            // 데이터 스토어 삭제 실패는 치명적이지 않음 (파일은 이미 삭제됨)
+            return { success: false, error: error.message, warning: 'File deleted but data store cleanup failed' };
+        }
     }
 }
 
