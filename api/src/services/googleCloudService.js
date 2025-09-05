@@ -45,23 +45,61 @@ class GoogleCloudService {
         }
 
         try {
-            // 모든 Google Cloud 클라이언트를 인증 옵션 없이 초기화합니다.
-            // 라이브러리가 환경 변수를 자동으로 찾아 처리합니다.
-            this.storage = new Storage();
+            // GOOGLE_APPLICATION_CREDENTIALS가 JSON 문자열인 경우 처리
+            let credentials = null;
+            if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+                try {
+                    // JSON 문자열인지 확인
+                    credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+                    console.log('✅ Using JSON credentials from environment variable');
+                } catch (e) {
+                    // 파일 경로인 경우
+                    console.log('✅ Using file path credentials from environment variable');
+                }
+            }
+
+            // Storage 클라이언트 초기화
+            if (credentials) {
+                this.storage = new Storage({ credentials });
+            } else {
+                this.storage = new Storage();
+            }
 
             if (VertexAI) {
-                this.vertexAI = new VertexAI({ project: this.projectId, location: this.region });
+                if (credentials) {
+                    this.vertexAI = new VertexAI({ 
+                        project: this.projectId, 
+                        location: this.region,
+                        credentials 
+                    });
+                } else {
+                    this.vertexAI = new VertexAI({ 
+                        project: this.projectId, 
+                        location: this.region 
+                    });
+                }
             }
 
             if (DocumentServiceClient) {
-                this.documentClient = new DocumentServiceClient();
+                if (credentials) {
+                    this.documentClient = new DocumentServiceClient({ credentials });
+                } else {
+                    this.documentClient = new DocumentServiceClient();
+                }
             }
 
-            this.predictionClient = new PredictionServiceClient({
-                apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
-            });
+            if (credentials) {
+                this.predictionClient = new PredictionServiceClient({
+                    apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
+                    credentials
+                });
+            } else {
+                this.predictionClient = new PredictionServiceClient({
+                    apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
+                });
+            }
 
-            console.log('✅ All Google Cloud clients initialized automatically.');
+            console.log('✅ All Google Cloud clients initialized with proper credentials.');
 
         } catch (error) {
             console.error('❌ CRITICAL: Google Cloud client initialization FAILED.', error);
