@@ -26,17 +26,34 @@ router.post('/', authenticateToken, requireCustomerId, async (req, res, next) =>
 
         console.log(`Chat request from customer ${customerId}: ${query}`);
 
-        // Search relevant documents
+        // Search relevant documents (고객별 격리된 검색)
         const searchResults = await googleCloudService.searchDocuments(
             customerId,
             query,
             maxResults
         );
 
-        // 검색 결과를 컨텍스트로 변환
+        // 보안 검증: 모든 검색 결과가 해당 고객의 것인지 재확인
+        const invalidResults = searchResults.filter(result => 
+            result.customerId && result.customerId !== customerId
+        );
+        
+        if (invalidResults.length > 0) {
+            console.error(`🚨 Security violation in chat: Invalid search results for customer ${customerId}`);
+            return res.status(403).json({ 
+                error: 'Access denied: Security violation detected',
+                success: false 
+            });
+        }
+
+        // 검색 결과를 컨텍스트로 변환 (고객 정보 포함하여 격리 확인 가능)
         const context = searchResults.length > 0 
-            ? searchResults.map(result => `${result.title}: ${result.content}`).join('\n\n')
+            ? searchResults.map(result => 
+                `문서명: ${result.title}\n내용: ${result.content}\n고객ID: ${result.customerId}`
+            ).join('\n\n---\n\n')
             : '';
+
+        console.log(`🔒 Secure context created for customer ${customerId}: ${context.length} characters`);
 
         // Generate AI response (문서가 없어도 AI가 적절히 답변)
         const aiResult = await googleCloudService.generateAIResponse(

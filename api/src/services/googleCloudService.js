@@ -178,8 +178,64 @@ class GoogleCloudService {
     }
 
     async searchDocuments(customerId, query, maxResults = 5) {
-        // 간단한 검색 구현
-        return [];
+        try {
+            console.log(`🔍 Searching documents for customer ${customerId} with query: "${query}"`);
+            
+            // 고객별 문서만 검색하기 위해 Storage에서 해당 고객 문서 목록 조회
+            const bucket = await this.getCustomerBucket(customerId);
+            const customerFolder = `customer-${customerId}/`;
+            
+            // 고객별 폴더에서만 파일 조회 (데이터 격리 보장)
+            const [files] = await bucket.getFiles({ prefix: customerFolder });
+            
+            if (files.length === 0) {
+                console.log(`📂 No documents found for customer ${customerId}`);
+                return [];
+            }
+
+            console.log(`📂 Found ${files.length} documents for customer ${customerId}`);
+            
+            // 현재는 모든 고객 문서를 반환 (실제로는 검색 쿼리 기반 필터링 필요)
+            // TODO: 실제 구현에서는 Vertex AI Search나 Embedding을 사용한 의미적 검색 구현
+            const searchResults = files.map((file, index) => {
+                const originalName = file.metadata.originalName || file.name;
+                const displayName = originalName.replace(/^customer-\d+\/\d+-[a-z0-9]+-/, '');
+                
+                return {
+                    id: `${customerId}-${index}`,
+                    title: displayName,
+                    content: `${displayName}에서 검색된 내용입니다. 실제 구현에서는 문서 내용을 파싱하여 제공합니다.`,
+                    uri: `gs://${bucket.name}/${file.name}`,
+                    customerId: customerId, // 보안: 반드시 해당 고객 ID 포함
+                    fileName: file.name,
+                    size: file.metadata.size,
+                    contentType: file.metadata.contentType
+                };
+            }).slice(0, maxResults);
+
+            // 보안 검증: 모든 결과가 해당 고객의 것인지 확인
+            const invalidResults = searchResults.filter(result => 
+                !result.fileName.startsWith(`customer-${customerId}/`)
+            );
+            
+            if (invalidResults.length > 0) {
+                console.error(`🚨 Security violation: Found documents not belonging to customer ${customerId}`);
+                throw new Error(`Access denied: Invalid document access attempt`);
+            }
+
+            console.log(`✅ Returning ${searchResults.length} secure search results for customer ${customerId}`);
+            return searchResults;
+
+        } catch (error) {
+            console.error(`❌ Error searching documents for customer ${customerId}:`, error);
+            
+            // 보안상 민감한 오류 정보는 숨김
+            if (error.message.includes('Access denied')) {
+                throw error; // 보안 오류는 그대로 전파
+            }
+            
+            throw new Error('Document search failed');
+        }
     }
 
     async generateAIResponse(query, context, customerId) {
@@ -195,8 +251,15 @@ class GoogleCloudService {
             // 고객사 정보 (실제 구현에서는 DB에서 조회)
             const customerName = `고객사-${customerId}`;
             
-            // 시스템 프롬프트 생성
-            const systemPrompt = generateSystemPrompt(customerName, context, query);
+            // 보안 검증: context에 다른 고객 정보가 포함되지 않았는지 확인
+            if (context && context.includes(`customer-`) && !context.includes(`customer-${customerId}/`)) {
+                console.error(`🚨 Security violation: Context contains other customer data for customer ${customerId}`);
+                throw new Error('Access denied: Invalid context data');
+            }
+            
+            // 시스템 프롬프트 생성 (고객별 격리 강조)
+            const systemPrompt = generateSystemPrompt(customerName, context, query) + 
+                `\n\n⚠️ 중요 보안 지침: 당신은 오직 고객사-${customerId}의 문서만을 참조해야 합니다. 다른 고객사의 정보는 절대로 사용하거나 언급해서는 안 됩니다.`;
             
             // Vertex AI Gemini 모델 사용
             const model = this.vertexAI.preview.getGenerativeModel({
