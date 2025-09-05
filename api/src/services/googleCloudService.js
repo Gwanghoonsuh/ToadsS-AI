@@ -24,57 +24,35 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        // 이 로그는 새 코드가 실행되고 있다는 증거입니다.
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v4 - Automatic Auth 🚀");
-
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v5 - Pure Auto Auth 🚀");
+        
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
+
+        // Google Cloud 클라이언트를 가장 단순한 방식으로 초기화
+        // 환경 변수는 라이브러리가 자동으로 처리
+        this.storage = new Storage();
         
-        this.isTestMode = !process.env.GOOGLE_APPLICATION_CREDENTIALS;
-
-        if (this.isTestMode) {
-            console.log('🔧 Google Cloud Service running in TEST MODE.');
-            return;
-        }
-
-        try {
-            // 모든 Google Cloud 클라이언트를 인증 옵션 없이 초기화합니다.
-            // 라이브러리가 환경 변수를 자동으로 찾아 처리합니다.
-            this.storage = new Storage();
-            
-            if (VertexAI) {
-                this.vertexAI = new VertexAI({ project: this.projectId, location: this.region });
-            }
-            
-            if (DocumentServiceClient) {
-                this.documentClient = new DocumentServiceClient();
-            }
-
-            this.predictionClient = new PredictionServiceClient({
-                apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
+        if (VertexAI) {
+            this.vertexAI = new VertexAI({ 
+                project: this.projectId, 
+                location: this.region 
             });
-            
-            console.log('✅ All Google Cloud clients initialized automatically.');
-
-        } catch (error) {
-            console.error('❌ CRITICAL: Google Cloud client initialization FAILED.', error);
-            this.isTestMode = true; // 실패 시 테스트 모드로 전환
         }
+        
+        if (DocumentServiceClient) {
+            this.documentClient = new DocumentServiceClient();
+        }
+
+        this.predictionClient = new PredictionServiceClient({
+            apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
+        });
+        
+        console.log('✅ All Google Cloud clients initialized with pure auto auth.');
     }
 
     async getCustomerBucket(customerId) {
-        if (this.isTestMode) {
-            console.log(`🔧 TEST MODE: Getting bucket for customer ${customerId}`);
-            return { name: `test-bucket-${customerId}` };
-        }
-
-        if (!this.storage) {
-            console.error('❌ Google Cloud Storage client not initialized');
-            this.isTestMode = true;
-            return { name: `test-bucket-${customerId}` };
-        }
-
         const bucketName = `toads-ai-agent-${customerId}`;
         const bucket = this.storage.bucket(bucketName);
         
@@ -92,7 +70,7 @@ class GoogleCloudService {
     async listFiles(customerId) {
         const bucket = await this.getCustomerBucket(customerId);
         const [files] = await bucket.getFiles();
-
+        
         return files.map(file => ({
             name: file.name,
             size: file.metadata.size,
@@ -105,14 +83,14 @@ class GoogleCloudService {
         const bucket = await this.getCustomerBucket(customerId);
         const fileName = `${Date.now()}-${originalName}`;
         const fileUpload = bucket.file(fileName);
-
+        
         await fileUpload.save(file.buffer, {
             metadata: {
                 contentType: file.mimetype,
                 originalName: originalName
             }
         });
-
+        
         return {
             fileName,
             gcsUri: `gs://${bucket.name}/${fileName}`
