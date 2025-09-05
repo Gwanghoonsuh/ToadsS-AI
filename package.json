@@ -1,0 +1,37 @@
+{
+    "name": "toads-ai-agent",
+    "version": "1.0.0",
+    "description": "Multi-tenant AI Agent Service for Maritime Companies",
+    "main": "server/index.js",
+    "scripts": {
+        "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+        "server:dev": "cd server && npm run dev",
+        "client:dev": "cd client && npm start",
+        "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+        "build": "cd client && npm ci && npm run build",
+        "build:client": "cd client && npm ci && npm run build",
+        "start": "cd server && npm start",
+        "start:prod": "cd server && npm run start:prod",
+        "vercel:build": "cd client && npm ci && npm run build",
+        "vercel:dev": "vercel dev"
+    },
+    "keywords": [
+        "ai",
+        "agent",
+        "maritime",
+        "multitenant",
+        "document-management"
+    ],
+    "author": "ToadsAI Team",
+    "license": "MIT",
+    "devDependencies": {
+        "concurrently": "^8.2.2"
+    },
+    "dependencies": {
+        "axios": "^1.11.0",
+        "bcryptjs": "^2.4.3",
+        "joi": "^17.11.0",
+        "jsonwebtoken": "^9.0.2",
+        "pg": "^8.16.3"
+    }
+}
