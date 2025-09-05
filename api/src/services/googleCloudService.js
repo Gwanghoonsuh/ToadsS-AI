@@ -56,15 +56,36 @@ class GoogleCloudService {
 
         if (VertexAI) {
             try {
+                // Vertex AI는 환경 변수 방식의 인증을 사용
+                // GOOGLE_APPLICATION_CREDENTIALS 환경 변수에서 JSON 문자열을 임시 파일로 처리하거나
+                // googleAuthOptions를 통해 전달
                 this.vertexAI = new VertexAI({
                     project: this.projectId,
                     location: this.region,
-                    credentials: credentials
+                    googleAuthOptions: {
+                        credentials: credentials
+                    }
                 });
                 console.log(`✅ Vertex AI client initialized - Project: ${this.projectId}, Location: ${this.region}`);
             } catch (vertexError) {
                 console.error('❌ Failed to initialize Vertex AI client:', vertexError);
-                this.vertexAI = null;
+                console.warn('⚠️ Falling back to environment-based auth for Vertex AI');
+                
+                try {
+                    // 서버리스 환경을 위한 특별 처리
+                    // GOOGLE_APPLICATION_CREDENTIALS를 임시 파일로 만들지 않고 직접 사용
+                    process.env.GOOGLE_CLOUD_PROJECT = this.projectId;
+                    
+                    this.vertexAI = new VertexAI({
+                        project: this.projectId,
+                        location: this.region
+                    });
+                    console.log(`✅ Vertex AI client initialized with environment auth`);
+                } catch (fallbackError) {
+                    console.error('❌ All Vertex AI initialization attempts failed:', fallbackError);
+                    console.warn('⚠️ Vertex AI will be disabled for this session');
+                    this.vertexAI = null;
+                }
             }
         } else {
             console.warn('⚠️ Vertex AI client not available');
@@ -272,14 +293,28 @@ class GoogleCloudService {
             const customerName = `고객사-${customerId}`;
             
             // 보안 검증: context에 다른 고객 정보가 포함되지 않았는지 확인
-            if (context && context.includes(`customer-`) && !context.includes(`customer-${customerId}/`)) {
+            if (context && context.includes(`customer-`) && !context.includes(`customer-${customerId}`)) {
                 console.error(`🚨 Security violation: Context contains other customer data for customer ${customerId}`);
                 throw new Error('Access denied: Invalid context data');
             }
             
             // 시스템 프롬프트 생성 (고객별 격리 강조)
-            const systemPrompt = generateSystemPrompt(customerName, context, query) + 
-                `\n\n⚠️ 중요 보안 지침: 당신은 오직 고객사-${customerId}의 문서만을 참조해야 합니다. 다른 고객사의 정보는 절대로 사용하거나 언급해서는 안 됩니다.`;
+            let systemPrompt;
+            try {
+                systemPrompt = generateSystemPrompt(customerName, context, query) + 
+                    `\n\n⚠️ 중요 보안 지침: 당신은 오직 고객사-${customerId}의 문서만을 참조해야 합니다. 다른 고객사의 정보는 절대로 사용하거나 언급해서는 안 됩니다.`;
+                
+                // 프롬프트 길이 검증 (토큰 제한 고려)
+                if (systemPrompt.length > 30000) { // 대략 15K 토큰 한도
+                    console.warn(`⚠️ System prompt too long (${systemPrompt.length} chars), truncating context`);
+                    const truncatedContext = context.substring(0, 5000) + '\n[...내용 생략...]';
+                    systemPrompt = generateSystemPrompt(customerName, truncatedContext, query) + 
+                        `\n\n⚠️ 중요 보안 지침: 당신은 오직 고객사-${customerId}의 문서만을 참조해야 합니다.`;
+                }
+            } catch (promptError) {
+                console.error('❌ Error generating system prompt:', promptError);
+                throw new Error('Failed to generate system prompt');
+            }
             
             // Vertex AI Gemini 모델 사용 (preview 제거, 안정적인 모델 사용)
             const model = this.vertexAI.getGenerativeModel({
@@ -390,7 +425,10 @@ class GoogleCloudService {
             let fallbackMessage = "죄송하지만 현재 기술적인 문제로 답변을 생성할 수 없습니다.";
             
             // 구체적인 오류에 따른 적절한 fallback 메시지
-            if (error.message.includes('404') || error.message.includes('Not Found')) {
+            if (error.message.includes('GoogleAuthError') || error.message.includes('Unable to authenticate')) {
+                fallbackMessage = "현재 AI 서비스 인증에 문제가 있어 답변을 생성할 수 없습니다. 잠시 후 다시 시도해주세요.";
+                console.error(`🚨 Google Auth Error - Project: ${this.projectId}, Region: ${this.region}`);
+            } else if (error.message.includes('404') || error.message.includes('Not Found')) {
                 fallbackMessage = "죄송하지만 현재 AI 모델을 사용할 수 없습니다. 지역 설정을 확인하고 있습니다.";
                 console.error(`🚨 Model availability issue - Region: ${this.region}, Model: gemini-1.5-pro`);
             } else if (error.message.includes('quota')) {
