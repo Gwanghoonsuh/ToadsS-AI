@@ -263,15 +263,15 @@ class GoogleCloudService {
             
             // Vertex AI Gemini 모델 사용
             const model = this.vertexAI.preview.getGenerativeModel({
-                model: "gemini-1.5-pro-preview-0409",
+                model: "gemini-1.5-pro-002", // 더 안정적인 모델 버전 사용
                 systemInstruction: {
-                    parts: [{ text: systemPrompt }],
-                    role: "system"
+                    parts: [{ text: systemPrompt }]
                 },
                 generationConfig: {
                     maxOutputTokens: 2048,
-                    temperature: 0.2, // 전문적이고 일관된 답변을 위한 낮은 temperature
+                    temperature: 0.2,
                     topP: 0.8,
+                    topK: 40
                 }
             });
 
@@ -289,7 +289,33 @@ class GoogleCloudService {
                 ]
             });
 
-            const aiResponse = result.response.candidates[0].content.parts[0].text;
+            // 응답 검증 및 추출
+            if (!result || !result.response) {
+                throw new Error('No response received from Vertex AI');
+            }
+
+            if (!result.response.candidates || result.response.candidates.length === 0) {
+                throw new Error('No candidates in Vertex AI response');
+            }
+
+            const candidate = result.response.candidates[0];
+            
+            // 안전 필터 확인
+            if (candidate.finishReason === 'SAFETY') {
+                console.warn('⚠️ Response blocked by safety filter');
+                return {
+                    response: "죄송하지만 안전 정책으로 인해 응답을 생성할 수 없습니다. 다른 방식으로 질문해주세요.",
+                    customerName: customerName,
+                    contextUsed: context.length > 0,
+                    safetyFiltered: true
+                };
+            }
+
+            if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+                throw new Error('No content in Vertex AI response candidate');
+            }
+
+            const aiResponse = candidate.content.parts[0].text;
             
             console.log(`✅ AI response generated successfully`);
             return {
@@ -301,11 +327,26 @@ class GoogleCloudService {
         } catch (error) {
             console.error(`❌ Error generating AI response:`, error);
             
+            let fallbackMessage = "죄송하지만 현재 기술적인 문제로 답변을 생성할 수 없습니다.";
+            
+            // 구체적인 오류에 따른 적절한 fallback 메시지
+            if (error.message.includes('quota')) {
+                fallbackMessage = "죄송하지만 현재 서비스 이용량이 많아 잠시 후 다시 시도해주세요.";
+            } else if (error.message.includes('authentication') || error.message.includes('credentials')) {
+                fallbackMessage = "죄송하지만 현재 인증 문제로 서비스를 이용할 수 없습니다. 관리자에게 문의해주세요.";
+            } else if (error.message.includes('network') || error.message.includes('timeout')) {
+                fallbackMessage = "죄송하지만 네트워크 문제로 응답을 생성할 수 없습니다. 잠시 후 다시 시도해주세요.";
+            } else if (error.message.includes('model') || error.message.includes('candidates')) {
+                fallbackMessage = "죄송하지만 AI 모델에서 적절한 응답을 생성할 수 없습니다. 다른 방식으로 질문해주세요.";
+            }
+            
             // 실패 시 fallback 응답
             return {
-                response: "죄송하지만 현재 기술적인 문제로 답변을 생성할 수 없습니다. 잠시 후 다시 시도해주세요.",
+                response: fallbackMessage,
                 error: error.message,
-                fallback: true
+                fallback: true,
+                customerName: `고객사-${customerId}`,
+                contextUsed: context.length > 0
             };
         }
     }
