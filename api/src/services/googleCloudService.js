@@ -25,7 +25,7 @@ try {
 class GoogleCloudService {
     constructor() {
         console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v5 - Pure Auto Auth 🚀");
-        
+
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
@@ -33,14 +33,14 @@ class GoogleCloudService {
         // Google Cloud 클라이언트를 가장 단순한 방식으로 초기화
         // 환경 변수는 라이브러리가 자동으로 처리
         this.storage = new Storage();
-        
+
         if (VertexAI) {
-            this.vertexAI = new VertexAI({ 
-                project: this.projectId, 
-                location: this.region 
+            this.vertexAI = new VertexAI({
+                project: this.projectId,
+                location: this.region
             });
         }
-        
+
         if (DocumentServiceClient) {
             this.documentClient = new DocumentServiceClient();
         }
@@ -48,7 +48,7 @@ class GoogleCloudService {
         this.predictionClient = new PredictionServiceClient({
             apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
         });
-        
+
         console.log('✅ All Google Cloud clients initialized with pure auto auth.');
     }
 
@@ -56,45 +56,63 @@ class GoogleCloudService {
         const bucketName = `toads-ai-agent-${customerId}`;
         const bucket = this.storage.bucket(bucketName);
         
-        const [exists] = await bucket.exists();
-        if (!exists) {
-            await bucket.create({
-                location: this.region,
-                storageClass: 'STANDARD'
-            });
+        try {
+            const [exists] = await bucket.exists();
+            if (!exists) {
+                console.log(`📦 Creating bucket: ${bucketName}`);
+                await bucket.create({
+                    location: this.region,
+                    storageClass: 'STANDARD'
+                });
+                console.log(`✅ Bucket created: ${bucketName}`);
+            }
+        } catch (error) {
+            console.error(`❌ Error managing bucket ${bucketName}:`, error);
+            throw new Error(`Failed to access bucket: ${error.message}`);
         }
         
         return bucket;
     }
 
     async listFiles(customerId) {
-        const bucket = await this.getCustomerBucket(customerId);
-        const [files] = await bucket.getFiles();
-        
-        return files.map(file => ({
-            name: file.name,
-            size: file.metadata.size,
-            created: file.metadata.timeCreated,
-            updated: file.metadata.updated
-        }));
+        try {
+            const bucket = await this.getCustomerBucket(customerId);
+            const [files] = await bucket.getFiles();
+            
+            return files.map(file => ({
+                name: file.name,
+                size: file.metadata.size,
+                created: file.metadata.timeCreated,
+                updated: file.metadata.updated
+            }));
+        } catch (error) {
+            console.error(`❌ Error listing files for customer ${customerId}:`, error);
+            throw new Error(`Failed to list files: ${error.message}`);
+        }
     }
 
     async uploadFile(customerId, file, originalName) {
-        const bucket = await this.getCustomerBucket(customerId);
-        const fileName = `${Date.now()}-${originalName}`;
-        const fileUpload = bucket.file(fileName);
-        
-        await fileUpload.save(file.buffer, {
-            metadata: {
-                contentType: file.mimetype,
-                originalName: originalName
-            }
-        });
-        
-        return {
-            fileName,
-            gcsUri: `gs://${bucket.name}/${fileName}`
-        };
+        try {
+            const bucket = await this.getCustomerBucket(customerId);
+            const fileName = `${Date.now()}-${originalName}`;
+            const fileUpload = bucket.file(fileName);
+            
+            await fileUpload.save(file.buffer, {
+                metadata: {
+                    contentType: file.mimetype,
+                    originalName: originalName
+                }
+            });
+            
+            console.log(`✅ File uploaded: ${fileName}`);
+            return {
+                fileName,
+                gcsUri: `gs://${bucket.name}/${fileName}`
+            };
+        } catch (error) {
+            console.error(`❌ Error uploading file ${originalName}:`, error);
+            throw new Error(`Failed to upload file: ${error.message}`);
+        }
     }
 
     async searchDocuments(customerId, query, maxResults = 5) {
