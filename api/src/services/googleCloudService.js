@@ -67,15 +67,15 @@ class GoogleCloudService {
 
             if (VertexAI) {
                 if (credentials) {
-                    this.vertexAI = new VertexAI({ 
-                        project: this.projectId, 
+                    this.vertexAI = new VertexAI({
+                        project: this.projectId,
                         location: this.region,
-                        credentials 
+                        credentials
                     });
                 } else {
-                    this.vertexAI = new VertexAI({ 
-                        project: this.projectId, 
-                        location: this.region 
+                    this.vertexAI = new VertexAI({
+                        project: this.projectId,
+                        location: this.region
                     });
                 }
             }
