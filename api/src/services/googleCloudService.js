@@ -26,6 +26,22 @@ class GoogleCloudService {
     constructor() {
         console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v6 - Complete Auto Auth 🚀");
 
+        // Google Cloud 인증 정보 파싱
+        let serviceAccountKey;
+        try {
+            console.log('--- STARTING AUTHENTICATION DEBUG ---');
+            console.log('✅ GOOGLE_APPLICATION_CREDENTIALS 환경 변수를 찾았습니다.');
+            console.log(`- 내용 길이: ${process.env.GOOGLE_APPLICATION_CREDENTIALS.length} 문자.`);
+            
+            serviceAccountKey = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+            console.log('✅ JSON 파싱에 성공했으며, 필수 키(client_email, private_key)를 포함하고 있습니다.');
+            console.log(`- 서비스 계정 이메일: ${serviceAccountKey.client_email}`);
+            console.log('--- ENDING AUTHENTICATION DEBUG ---');
+        } catch (error) {
+            console.error('❌ 인증 정보 파싱 실패:', error);
+            throw new Error(`Authentication failed: ${error.message}`);
+        }
+
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
