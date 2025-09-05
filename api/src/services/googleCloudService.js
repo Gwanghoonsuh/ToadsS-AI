@@ -261,9 +261,9 @@ class GoogleCloudService {
             const systemPrompt = generateSystemPrompt(customerName, context, query) + 
                 `\n\n⚠️ 중요 보안 지침: 당신은 오직 고객사-${customerId}의 문서만을 참조해야 합니다. 다른 고객사의 정보는 절대로 사용하거나 언급해서는 안 됩니다.`;
             
-            // Vertex AI Gemini 모델 사용
-            const model = this.vertexAI.preview.getGenerativeModel({
-                model: "gemini-1.5-pro-002", // 더 안정적인 모델 버전 사용
+            // Vertex AI Gemini 모델 사용 (preview 제거, 안정적인 모델 사용)
+            const model = this.vertexAI.getGenerativeModel({
+                model: "gemini-1.5-pro", // 일반 available 버전 사용
                 systemInstruction: {
                     parts: [{ text: systemPrompt }]
                 },
@@ -278,16 +278,50 @@ class GoogleCloudService {
             console.log(`🤖 Generating AI response for customer ${customerId}`);
             console.log(`📝 Query: ${query}`);
             console.log(`📚 Context length: ${context.length} characters`);
+            console.log(`🔧 Model: ${model.model}, Region: ${this.region}`);
 
-            // AI 응답 생성
-            const result = await model.generateContent({
-                contents: [
-                    {
-                        role: "user",
-                        parts: [{ text: query }]
-                    }
-                ]
-            });
+            // AI 응답 생성 (404 오류 발생 시 재시도 로직)
+            let result;
+            try {
+                result = await model.generateContent({
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [{ text: query }]
+                        }
+                    ]
+                });
+            } catch (modelError) {
+                if (modelError.message.includes('404')) {
+                    console.warn('⚠️ Primary model not available, trying fallback model...');
+                    
+                    // Fallback to basic gemini-pro model
+                    const fallbackModel = this.vertexAI.getGenerativeModel({
+                        model: "gemini-pro",
+                        generationConfig: {
+                            maxOutputTokens: 2048,
+                            temperature: 0.2,
+                            topP: 0.8
+                        }
+                    });
+                    
+                    // Fallback 모델은 systemInstruction을 지원하지 않을 수 있으므로 직접 프롬프트에 포함
+                    const fullPrompt = `${systemPrompt}\n\n사용자 질문: ${query}`;
+                    
+                    result = await fallbackModel.generateContent({
+                        contents: [
+                            {
+                                role: "user", 
+                                parts: [{ text: fullPrompt }]
+                            }
+                        ]
+                    });
+                    
+                    console.log('✅ Fallback model response generated');
+                } else {
+                    throw modelError;
+                }
+            }
 
             // 응답 검증 및 추출
             if (!result || !result.response) {
@@ -326,11 +360,15 @@ class GoogleCloudService {
 
         } catch (error) {
             console.error(`❌ Error generating AI response:`, error);
+            console.error(`🔍 Error details - Project: ${this.projectId}, Region: ${this.region}`);
             
             let fallbackMessage = "죄송하지만 현재 기술적인 문제로 답변을 생성할 수 없습니다.";
             
             // 구체적인 오류에 따른 적절한 fallback 메시지
-            if (error.message.includes('quota')) {
+            if (error.message.includes('404') || error.message.includes('Not Found')) {
+                fallbackMessage = "죄송하지만 현재 AI 모델을 사용할 수 없습니다. 지역 설정을 확인하고 있습니다.";
+                console.error(`🚨 Model availability issue - Region: ${this.region}, Model: gemini-1.5-pro`);
+            } else if (error.message.includes('quota')) {
                 fallbackMessage = "죄송하지만 현재 서비스 이용량이 많아 잠시 후 다시 시도해주세요.";
             } else if (error.message.includes('authentication') || error.message.includes('credentials')) {
                 fallbackMessage = "죄송하지만 현재 인증 문제로 서비스를 이용할 수 없습니다. 관리자에게 문의해주세요.";
