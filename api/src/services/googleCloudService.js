@@ -55,13 +55,20 @@ class GoogleCloudService {
         });
 
         if (VertexAI) {
-            this.vertexAI = new VertexAI({
-                project: this.projectId,
-                location: this.region,
-                googleAuthOptions: {
+            try {
+                this.vertexAI = new VertexAI({
+                    project: this.projectId,
+                    location: this.region,
                     credentials: credentials
-                }
-            });
+                });
+                console.log(`✅ Vertex AI client initialized - Project: ${this.projectId}, Location: ${this.region}`);
+            } catch (vertexError) {
+                console.error('❌ Failed to initialize Vertex AI client:', vertexError);
+                this.vertexAI = null;
+            }
+        } else {
+            console.warn('⚠️ Vertex AI client not available');
+            this.vertexAI = null;
         }
 
         if (DocumentServiceClient) {
@@ -240,11 +247,24 @@ class GoogleCloudService {
 
     async generateAIResponse(query, context, customerId) {
         try {
-            if (!VertexAI) {
-                console.log('⚠️ Vertex AI not available, using mock response');
+            // Vertex AI 클라이언트 가용성 검사
+            if (!VertexAI || !this.vertexAI) {
+                console.log('⚠️ Vertex AI not available or not initialized, using mock response');
                 return {
                     response: "죄송하지만 현재 AI 서비스를 이용할 수 없습니다. 나중에 다시 시도해주세요.",
-                    mock: true
+                    mock: true,
+                    reason: !VertexAI ? 'Library not loaded' : 'Client not initialized'
+                };
+            }
+
+            // Vertex AI 클라이언트 메서드 존재 확인
+            if (typeof this.vertexAI.getGenerativeModel !== 'function') {
+                console.error('❌ getGenerativeModel method not available');
+                console.error('🔍 Available methods:', Object.getOwnPropertyNames(this.vertexAI));
+                return {
+                    response: "죄송하지만 현재 AI 서비스 설정에 문제가 있습니다. 관리자에게 문의해주세요.",
+                    mock: true,
+                    reason: 'Method not available'
                 };
             }
 
@@ -280,8 +300,10 @@ class GoogleCloudService {
             console.log(`📚 Context length: ${context.length} characters`);
             console.log(`🔧 Model: ${model.model}, Region: ${this.region}`);
 
-            // AI 응답 생성 (404 오류 발생 시 재시도 로직)
+            // AI 응답 생성 (오류 발생 시 재시도 로직)
             let result;
+            let usedFallback = false;
+            
             try {
                 result = await model.generateContent({
                     contents: [
@@ -292,10 +314,10 @@ class GoogleCloudService {
                     ]
                 });
             } catch (modelError) {
-                if (modelError.message.includes('404')) {
-                    console.warn('⚠️ Primary model not available, trying fallback model...');
-                    
-                    // Fallback to basic gemini-pro model
+                console.warn('⚠️ Primary model failed, trying fallback model...', modelError.message);
+                
+                try {
+                    // Fallback to basic gemini-pro model (systemInstruction 없이)
                     const fallbackModel = this.vertexAI.getGenerativeModel({
                         model: "gemini-pro",
                         generationConfig: {
@@ -305,8 +327,8 @@ class GoogleCloudService {
                         }
                     });
                     
-                    // Fallback 모델은 systemInstruction을 지원하지 않을 수 있으므로 직접 프롬프트에 포함
-                    const fullPrompt = `${systemPrompt}\n\n사용자 질문: ${query}`;
+                    // 시스템 프롬프트를 사용자 메시지에 포함
+                    const fullPrompt = `${systemPrompt}\n\n---\n\n사용자 질문: ${query}`;
                     
                     result = await fallbackModel.generateContent({
                         contents: [
@@ -317,9 +339,11 @@ class GoogleCloudService {
                         ]
                     });
                     
-                    console.log('✅ Fallback model response generated');
-                } else {
-                    throw modelError;
+                    usedFallback = true;
+                    console.log('✅ Fallback model response generated successfully');
+                } catch (fallbackError) {
+                    console.error('❌ Both primary and fallback models failed');
+                    throw new Error(`AI generation failed: Primary (${modelError.message}), Fallback (${fallbackError.message})`);
                 }
             }
 
@@ -351,11 +375,12 @@ class GoogleCloudService {
 
             const aiResponse = candidate.content.parts[0].text;
             
-            console.log(`✅ AI response generated successfully`);
+            console.log(`✅ AI response generated successfully${usedFallback ? ' (using fallback model)' : ''}`);
             return {
                 response: aiResponse,
                 customerName: customerName,
-                contextUsed: context.length > 0
+                contextUsed: context.length > 0,
+                usedFallback: usedFallback
             };
 
         } catch (error) {
