@@ -24,14 +24,14 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v5 - Pure Auto Auth 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v6 - Complete Auto Auth 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
 
-        // Google Cloud 클라이언트를 가장 단순한 방식으로 초기화
-        // 환경 변수는 라이브러리가 자동으로 처리
+        // Google Cloud 클라이언트를 완전히 자동 인증으로 초기화
+        // credentials나 keyFilename 옵션을 전혀 사용하지 않음
         this.storage = new Storage();
 
         if (VertexAI) {
@@ -49,13 +49,13 @@ class GoogleCloudService {
             apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
         });
 
-        console.log('✅ All Google Cloud clients initialized with pure auto auth.');
+        console.log('✅ All Google Cloud clients initialized with complete auto auth.');
     }
 
     async getCustomerBucket(customerId) {
         const bucketName = `toads-ai-agent-${customerId}`;
         const bucket = this.storage.bucket(bucketName);
-        
+
         try {
             const [exists] = await bucket.exists();
             if (!exists) {
@@ -70,7 +70,7 @@ class GoogleCloudService {
             console.error(`❌ Error managing bucket ${bucketName}:`, error);
             throw new Error(`Failed to access bucket: ${error.message}`);
         }
-        
+
         return bucket;
     }
 
@@ -78,7 +78,7 @@ class GoogleCloudService {
         try {
             const bucket = await this.getCustomerBucket(customerId);
             const [files] = await bucket.getFiles();
-            
+
             return files.map(file => ({
                 name: file.name,
                 size: file.metadata.size,
@@ -96,14 +96,14 @@ class GoogleCloudService {
             const bucket = await this.getCustomerBucket(customerId);
             const fileName = `${Date.now()}-${originalName}`;
             const fileUpload = bucket.file(fileName);
-            
+
             await fileUpload.save(file.buffer, {
                 metadata: {
                     contentType: file.mimetype,
                     originalName: originalName
                 }
             });
-            
+
             console.log(`✅ File uploaded: ${fileName}`);
             return {
                 fileName,
