@@ -58,14 +58,16 @@ router.post('/', authenticateToken, requireCustomerId, uploadSingle, async (req,
         const customerId = req.user.customerId;
         const file = req.file;
 
-        console.log(`Uploading file for customer ${customerId}: ${file.originalname}`);
-        console.log(`Corrected filename: ${file.filename}`);
+        // 한글 파일명 인코딩 처리
+        const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        console.log(`Uploading file for customer ${customerId}: ${originalName}`);
+        console.log(`File size: ${file.size} bytes`);
 
         // Upload to Google Cloud Storage
         const uploadResult = await googleCloudService.uploadFile(
             customerId,
             file,
-            file.originalname // Use original name for display, but file.filename for actual storage
+            originalName
         );
 
         // Add to Discovery Engine data store
@@ -110,14 +112,16 @@ router.post('/batch', authenticateToken, requireCustomerId, uploadMultiple, asyn
 
         const uploadPromises = files.map(async (file) => {
             try {
-                console.log(`Uploading file: ${file.originalname}`);
-                console.log(`Corrected filename: ${file.filename}`);
+                // 한글 파일명 인코딩 처리
+                const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+                console.log(`Uploading file: ${originalName}`);
+                console.log(`File size: ${file.size} bytes`);
 
                 // Upload to Google Cloud Storage
                 const uploadResult = await googleCloudService.uploadFile(
                     customerId,
                     file,
-                    file.originalname // Use original name for display, but file.filename for actual storage
+                    originalName
                 );
 
                 // Add to Discovery Engine data store
