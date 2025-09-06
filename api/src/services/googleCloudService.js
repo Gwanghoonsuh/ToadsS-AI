@@ -24,26 +24,26 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v10 - Final JSON Credentials Fix 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v11 - Billing Account Error Handler 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
         
         // isTestMode는 환경 변수 존재 여부로만 판단
-        this.isTestMode = !process.env.GOOGLE_APPLICATION_CREDENTIALS;
+        this.isTestMode = !process.env.GOOGLE_CLOUD_CREDENTIALS && !process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
         if (this.isTestMode) {
-            console.log('🔧 Google Cloud Service running in TEST MODE.');
+            console.log('🔧 Google Cloud Service running in TEST MODE - No credentials found.');
             return;
         }
 
         try {
             let credentials = null;
-            const credentialsValue = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+            const credentialsValue = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_CLOUD_CREDENTIALS;
             
             // JSON 문자열인지 파일 경로인지 확인
-            if (credentialsValue.startsWith('{')) {
+            if (credentialsValue && credentialsValue.startsWith('{')) {
                 // JSON 문자열인 경우 파싱해서 credentials 객체로 사용
                 try {
                     credentials = JSON.parse(credentialsValue);
@@ -132,6 +132,14 @@ class GoogleCloudService {
             }
         } catch (error) {
             console.error(`❌ Error managing bucket ${bucketName}:`, error);
+            
+            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
+            if (error.message.includes('billing account') && error.message.includes('disabled')) {
+                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
+                this.isTestMode = true;
+                return null; // 테스트 모드에서는 null 반환
+            }
+            
             throw new Error(`Failed to access bucket: ${error.message}`);
         }
 
@@ -166,6 +174,14 @@ class GoogleCloudService {
             }));
         } catch (error) {
             console.error(`❌ Error listing files for customer ${customerId}:`, error);
+            
+            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
+            if (error.message.includes('billing account') && error.message.includes('disabled')) {
+                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
+                this.isTestMode = true;
+                return await this.listFiles(customerId); // 테스트 모드로 재시도
+            }
+            
             throw new Error(`Failed to list files: ${error.message}`);
         }
     }
@@ -212,6 +228,20 @@ class GoogleCloudService {
             };
         } catch (error) {
             console.error(`❌ Error uploading file ${originalName}:`, error);
+            
+            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
+            if (error.message.includes('billing account') && error.message.includes('disabled')) {
+                console.error('🚨 BILLING ACCOUNT DISABLED: Google Cloud 청구 계정이 비활성화되어 있습니다.');
+                console.error('💡 해결 방법:');
+                console.error('   1. Google Cloud Console에서 청구 계정 활성화');
+                console.error('   2. 프로젝트에 유효한 청구 계정 연결');
+                console.error('   3. 현재는 자동으로 테스트 모드로 전환됩니다.');
+                this.isTestMode = true;
+                
+                // 테스트 모드로 재귀 호출
+                return await this.uploadFile(customerId, file, originalName);
+            }
+            
             throw new Error(`Failed to upload file: ${error.message}`);
         }
     }
@@ -239,6 +269,14 @@ class GoogleCloudService {
             return { success: true, fileName };
         } catch (error) {
             console.error(`❌ Error deleting file ${fileName}:`, error);
+            
+            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
+            if (error.message.includes('billing account') && error.message.includes('disabled')) {
+                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
+                this.isTestMode = true;
+                return await this.deleteFile(customerId, fileName); // 테스트 모드로 재시도
+            }
+            
             throw new Error(`Failed to delete file: ${error.message}`);
         }
     }
@@ -303,6 +341,13 @@ class GoogleCloudService {
 
         } catch (error) {
             console.error(`❌ Error searching documents for customer ${customerId}:`, error);
+            
+            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
+            if (error.message.includes('billing account') && error.message.includes('disabled')) {
+                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
+                this.isTestMode = true;
+                return await this.searchDocuments(customerId, query, maxResults); // 테스트 모드로 재시도
+            }
             
             // 보안상 민감한 오류 정보는 숨김
             if (error.message.includes('Access denied')) {
