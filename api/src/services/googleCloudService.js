@@ -131,7 +131,7 @@ class GoogleCloudService {
         }
 
         // 공유 버킷 사용 (모든 고객이 같은 버킷, 폴더로 구분)
-        const bucketName = 'toads-shipping-ai-docs';
+        const bucketName = 'toads-shipping-ai-doc';
         const bucket = this.storage.bucket(bucketName);
 
         try {
@@ -572,7 +572,7 @@ class GoogleCloudService {
 
         try {
             // 메인 공유 버킷 사용 (toads-shipping-ai-docs)
-            const bucketName = 'toads-shipping-ai-docs';
+            const bucketName = 'toads-shipping-ai-doc';
             const bucket = this.storage.bucket(bucketName);
             
             // 버킷 존재 확인
