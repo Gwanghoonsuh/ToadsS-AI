@@ -24,15 +24,14 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        // 이 로그는 새 코드가 실행되고 있다는 증거입니다.
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v15 - JSON vs File Path Fix 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v10 - Final JSON Credentials Fix 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
+        this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
         
-        // 환경 변수 확인 및 테스트 모드 판단
-        const hasCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_CLOUD_CREDENTIALS;
-        this.isTestMode = !hasCredentials;
+        // isTestMode는 환경 변수 존재 여부로만 판단
+        this.isTestMode = !process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
         if (this.isTestMode) {
             console.log('🔧 Google Cloud Service running in TEST MODE.');
@@ -40,33 +39,71 @@ class GoogleCloudService {
         }
 
         try {
-            // GOOGLE_CLOUD_CREDENTIALS가 있으면 JSON으로 파싱해서 사용
-            if (process.env.GOOGLE_CLOUD_CREDENTIALS) {
-                console.log('✅ Using GOOGLE_CLOUD_CREDENTIALS (JSON format)');
-                const credentials = JSON.parse(process.env.GOOGLE_CLOUD_CREDENTIALS);
+            let credentials = null;
+            const credentialsValue = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+            
+            // JSON 문자열인지 파일 경로인지 확인
+            if (credentialsValue.startsWith('{')) {
+                // JSON 문자열인 경우 파싱해서 credentials 객체로 사용
+                try {
+                    credentials = JSON.parse(credentialsValue);
+                    console.log('✅ Using JSON credentials from environment variable');
+                } catch (parseError) {
+                    console.error('❌ Failed to parse JSON credentials:', parseError.message);
+                    throw parseError;
+                }
+            } else {
+                console.log('✅ Using file path credentials from environment variable');
+                // 파일 경로인 경우 자동 감지 사용
+            }
+
+            // credentials가 있으면 명시적으로 전달, 없으면 자동 감지
+            if (credentials) {
                 this.storage = new Storage({ 
                     credentials: credentials,
                     projectId: this.projectId 
                 });
-            } else {
-                // GOOGLE_APPLICATION_CREDENTIALS는 파일 경로로 처리
-                console.log('✅ Using GOOGLE_APPLICATION_CREDENTIALS (file path)');
-                this.storage = new Storage();
-            }
-            
-            if (VertexAI) {
-                this.vertexAI = new VertexAI({ project: this.projectId, location: this.region });
-            }
-            
-            if (DocumentServiceClient) {
-                this.documentClient = new DocumentServiceClient();
-            }
+                
+                if (VertexAI) {
+                    this.vertexAI = new VertexAI({ 
+                        project: this.projectId, 
+                        location: this.region,
+                        googleAuthOptions: { credentials: credentials }
+                    });
+                }
+                
+                if (DocumentServiceClient) {
+                    this.documentClient = new DocumentServiceClient({
+                        credentials: credentials,
+                        projectId: this.projectId
+                    });
+                }
 
-            this.predictionClient = new PredictionServiceClient({
-                apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
-            });
-            
-            console.log('✅ All Google Cloud clients initialized automatically.');
+                this.predictionClient = new PredictionServiceClient({
+                    apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
+                    credentials: credentials,
+                    projectId: this.projectId
+                });
+                
+                console.log('✅ All Google Cloud clients initialized with JSON credentials.');
+            } else {
+                // 파일 경로 방식 - 자동 감지
+                this.storage = new Storage();
+                
+                if (VertexAI) {
+                    this.vertexAI = new VertexAI({ project: this.projectId, location: this.region });
+                }
+                
+                if (DocumentServiceClient) {
+                    this.documentClient = new DocumentServiceClient();
+                }
+
+                this.predictionClient = new PredictionServiceClient({
+                    apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
+                });
+                
+                console.log('✅ All Google Cloud clients initialized with file path credentials.');
+            }
 
         } catch (error) {
             console.error('❌ CRITICAL: Google Cloud client initialization FAILED.', error);
@@ -80,7 +117,7 @@ class GoogleCloudService {
             return null;
         }
 
-        const bucketName = 'toads-shipping-ai-docs';
+        const bucketName = `toads-ai-agent-${customerId}`;
         const bucket = this.storage.bucket(bucketName);
 
         try {
@@ -95,96 +132,10 @@ class GoogleCloudService {
             }
         } catch (error) {
             console.error(`❌ Error managing bucket ${bucketName}:`, error);
-            
-            // 구체적인 오류 유형별 처리
-            if (error.message.includes('billing account') && error.message.includes('disabled')) {
-                console.error('🚨 BILLING ACCOUNT DISABLED: Google Cloud 청구 계정이 비활성화되어 있습니다.');
-                this.isTestMode = true;
-                return null;
-            }
-            
-            if (error.code === 403) {
-                if (error.message.includes('storage.buckets.get')) {
-                    console.error('🚨 PERMISSION DENIED: 서비스 계정에 Storage 권한이 없습니다.');
-                    console.error('💡 해결 방법:');
-                    console.error('   1. Google Cloud Console → IAM & Admin → IAM');
-                    console.error('   2. 서비스 계정에 "Storage Object Admin" 역할 부여');
-                    console.error('   3. 또는 CLI: gcloud projects add-iam-policy-binding');
-                    console.error(`   4. 체크리스트: ${__dirname}/../claudedocs/google-cloud-setup-checklist.md`);
-                } else {
-                    console.error('🚨 ACCESS DENIED: Google Cloud 접근 권한 문제');
-                }
-                this.isTestMode = true;
-                return null;
-            }
-            
-            if (error.code === 404) {
-                console.error(`🚨 BUCKET NOT FOUND: 버킷 "${bucketName}"이 존재하지 않습니다.`);
-                console.error('💡 해결 방법:');
-                console.error(`   1. Google Cloud Console에서 버킷 생성: ${bucketName}`);
-                console.error(`   2. 또는 CLI: gsutil mb gs://${bucketName}`);
-                this.isTestMode = true;
-                return null;
-            }
-            
             throw new Error(`Failed to access bucket: ${error.message}`);
         }
 
         return bucket;
-    }
-
-    async ensureCustomerFolder(customerId) {
-        if (this.isTestMode) {
-            console.log(`🔧 Test mode: Customer folder ${customerId} assumed to exist`);
-            return { success: true, created: false, testMode: true };
-        }
-
-        try {
-            const bucket = await this.getCustomerBucket(customerId);
-            if (!bucket) {
-                throw new Error('Bucket not available');
-            }
-
-            const customerFolder = `${customerId}/`;
-            const placeholderFile = `${customerFolder}.keep`;
-            const file = bucket.file(placeholderFile);
-
-            // 폴더 존재 여부 확인 (폴더 안에 파일이 있는지 확인)
-            const [files] = await bucket.getFiles({ 
-                prefix: customerFolder,
-                maxResults: 1 
-            });
-
-            if (files.length === 0) {
-                // 폴더가 비어있다면 .keep 파일 생성 (GCS는 빈 폴더를 지원하지 않음)
-                console.log(`📁 Creating customer folder: ${customerFolder}`);
-                await file.save('', {
-                    metadata: {
-                        contentType: 'text/plain',
-                        customerId: customerId.toString(),
-                        purpose: 'folder-placeholder',
-                        created: new Date().toISOString()
-                    }
-                });
-                console.log(`✅ Customer folder created: ${customerFolder}`);
-                return { success: true, created: true, folder: customerFolder };
-            } else {
-                console.log(`📁 Customer folder already exists: ${customerFolder}`);
-                return { success: true, created: false, folder: customerFolder };
-            }
-
-        } catch (error) {
-            console.error(`❌ Error ensuring customer folder for customer ${customerId}:`, error);
-            
-            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
-            if (error.message.includes('billing account') && error.message.includes('disabled')) {
-                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
-                this.isTestMode = true;
-                return await this.ensureCustomerFolder(customerId); // 테스트 모드로 재시도
-            }
-            
-            throw new Error(`Failed to ensure customer folder: ${error.message}`);
-        }
     }
 
     async listFiles(customerId) {
@@ -199,7 +150,7 @@ class GoogleCloudService {
                 return [];
             }
 
-            const customerFolder = `${customerId}/`;
+            const customerFolder = `customer-${customerId}/`;
             
             // 고객별 폴더에서만 파일 조회 (데이터 격리)
             const [files] = await bucket.getFiles({ prefix: customerFolder });
@@ -215,14 +166,6 @@ class GoogleCloudService {
             }));
         } catch (error) {
             console.error(`❌ Error listing files for customer ${customerId}:`, error);
-            
-            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
-            if (error.message.includes('billing account') && error.message.includes('disabled')) {
-                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
-                this.isTestMode = true;
-                return await this.listFiles(customerId); // 테스트 모드로 재시도
-            }
-            
             throw new Error(`Failed to list files: ${error.message}`);
         }
     }
@@ -234,7 +177,7 @@ class GoogleCloudService {
                 fileName: `test-${originalName}`,
                 gcsUri: `gs://test-bucket/test-${originalName}`,
                 timestamp: Date.now(),
-                customerFolder: `${customerId}`
+                customerFolder: `customer-${customerId}`
             };
         }
 
@@ -244,10 +187,10 @@ class GoogleCloudService {
                 throw new Error('Bucket not available in test mode');
             }
             
-            // 고객별 폴더 구조 생성: {customerId}/timestamp-randomstring-filename
+            // 고객별 폴더 구조 생성: customer-{customerId}/timestamp-randomstring-filename
             const timestamp = Date.now();
             const randomString = Math.random().toString(36).substring(2, 8);
-            const customerFolder = `${customerId}`;
+            const customerFolder = `customer-${customerId}`;
             const fileName = `${customerFolder}/${timestamp}-${randomString}-${originalName}`;
             const fileUpload = bucket.file(fileName);
 
@@ -269,20 +212,6 @@ class GoogleCloudService {
             };
         } catch (error) {
             console.error(`❌ Error uploading file ${originalName}:`, error);
-            
-            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
-            if (error.message.includes('billing account') && error.message.includes('disabled')) {
-                console.error('🚨 BILLING ACCOUNT DISABLED: Google Cloud 청구 계정이 비활성화되어 있습니다.');
-                console.error('💡 해결 방법:');
-                console.error('   1. Google Cloud Console에서 청구 계정 활성화');
-                console.error('   2. 프로젝트에 유효한 청구 계정 연결');
-                console.error('   3. 현재는 자동으로 테스트 모드로 전환됩니다.');
-                this.isTestMode = true;
-                
-                // 테스트 모드로 재귀 호출
-                return await this.uploadFile(customerId, file, originalName);
-            }
-            
             throw new Error(`Failed to upload file: ${error.message}`);
         }
     }
@@ -301,7 +230,7 @@ class GoogleCloudService {
             const file = bucket.file(fileName);
             
             // 파일이 해당 고객의 폴더에 있는지 확인 (보안)
-            if (!fileName.startsWith(`${customerId}/`)) {
+            if (!fileName.startsWith(`customer-${customerId}/`)) {
                 throw new Error(`Access denied: File does not belong to customer ${customerId}`);
             }
             
@@ -310,14 +239,6 @@ class GoogleCloudService {
             return { success: true, fileName };
         } catch (error) {
             console.error(`❌ Error deleting file ${fileName}:`, error);
-            
-            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
-            if (error.message.includes('billing account') && error.message.includes('disabled')) {
-                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
-                this.isTestMode = true;
-                return await this.deleteFile(customerId, fileName); // 테스트 모드로 재시도
-            }
-            
             throw new Error(`Failed to delete file: ${error.message}`);
         }
     }
@@ -337,7 +258,7 @@ class GoogleCloudService {
                 return [];
             }
 
-            const customerFolder = `${customerId}/`;
+            const customerFolder = `customer-${customerId}/`;
             
             // 고객별 폴더에서만 파일 조회 (데이터 격리 보장)
             const [files] = await bucket.getFiles({ prefix: customerFolder });
@@ -353,7 +274,7 @@ class GoogleCloudService {
             // TODO: 실제 구현에서는 Vertex AI Search나 Embedding을 사용한 의미적 검색 구현
             const searchResults = files.map((file, index) => {
                 const originalName = file.metadata.originalName || file.name;
-                const displayName = originalName.replace(/^\d+\/\d+-[a-z0-9]+-/, '');
+                const displayName = originalName.replace(/^customer-\d+\/\d+-[a-z0-9]+-/, '');
                 
                 return {
                     id: `${customerId}-${index}`,
@@ -369,7 +290,7 @@ class GoogleCloudService {
 
             // 보안 검증: 모든 결과가 해당 고객의 것인지 확인
             const invalidResults = searchResults.filter(result => 
-                !result.fileName.startsWith(`${customerId}/`)
+                !result.fileName.startsWith(`customer-${customerId}/`)
             );
             
             if (invalidResults.length > 0) {
@@ -382,13 +303,6 @@ class GoogleCloudService {
 
         } catch (error) {
             console.error(`❌ Error searching documents for customer ${customerId}:`, error);
-            
-            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
-            if (error.message.includes('billing account') && error.message.includes('disabled')) {
-                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
-                this.isTestMode = true;
-                return await this.searchDocuments(customerId, query, maxResults); // 테스트 모드로 재시도
-            }
             
             // 보안상 민감한 오류 정보는 숨김
             if (error.message.includes('Access denied')) {
@@ -435,7 +349,7 @@ class GoogleCloudService {
             const customerName = `고객사-${customerId}`;
             
             // 보안 검증: context에 다른 고객 정보가 포함되지 않았는지 확인
-            if (context && context.includes(`/`) && !context.includes(`${customerId}/`)) {
+            if (context && context.includes(`customer-`) && !context.includes(`customer-${customerId}`)) {
                 console.error(`🚨 Security violation: Context contains other customer data for customer ${customerId}`);
                 throw new Error('Access denied: Invalid context data');
             }
@@ -629,56 +543,6 @@ class GoogleCloudService {
             console.error(`❌ Error removing document from data store: ${error.message}`);
             // 데이터 스토어 삭제 실패는 치명적이지 않음 (파일은 이미 삭제됨)
             return { success: false, error: error.message, warning: 'File deleted but data store cleanup failed' };
-        }
-    }
-
-    // 로그인 시 호출할 초기화 메서드
-    async initializeCustomer(customerId) {
-        if (this.isTestMode) {
-            console.log(`🔧 Test mode: Customer ${customerId} initialized`);
-            return { 
-                success: true, 
-                testMode: true, 
-                bucket: 'test-bucket',
-                folder: `${customerId}/`,
-                message: 'Running in test mode - no actual cloud resources created'
-            };
-        }
-
-        try {
-            console.log(`🚀 Initializing customer ${customerId}...`);
-            
-            // 1. 버킷 확인/생성
-            const bucket = await this.getCustomerBucket(customerId);
-            if (!bucket) {
-                throw new Error('Failed to initialize bucket');
-            }
-
-            // 2. 고객 폴더 확인/생성
-            const folderResult = await this.ensureCustomerFolder(customerId);
-            
-            console.log(`✅ Customer ${customerId} initialized successfully`);
-            return {
-                success: true,
-                bucket: bucket.name,
-                folder: folderResult.folder,
-                folderCreated: folderResult.created,
-                message: folderResult.created ? 
-                    `New customer folder created: ${folderResult.folder}` :
-                    `Customer folder already exists: ${folderResult.folder}`
-            };
-
-        } catch (error) {
-            console.error(`❌ Error initializing customer ${customerId}:`, error);
-            
-            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
-            if (error.message.includes('billing account') && error.message.includes('disabled')) {
-                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
-                this.isTestMode = true;
-                return await this.initializeCustomer(customerId); // 테스트 모드로 재시도
-            }
-            
-            throw new Error(`Failed to initialize customer: ${error.message}`);
         }
     }
 }
