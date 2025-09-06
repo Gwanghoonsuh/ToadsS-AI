@@ -2,7 +2,7 @@
 
 ## 프로젝트 구조 변경 완료
 
-Railway에서 Vercel로 배포 서버를 변경하기 위해 다음과 같은 작업을 완료했습니다:
+Vercel로 배포하기 위해 다음과 같은 작업을 완료했습니다:
 
 ### 1. Vercel 설정 파일 생성
 - `vercel.json`: Vercel 빌드 및 라우팅 설정
@@ -63,7 +63,7 @@ NODE_ENV=production
 ## 주요 변경사항
 
 ### API 엔드포인트 변경
-- **이전 (Railway)**: `https://your-app.railway.app/api/auth/login`
+- **이전**: 다른 플랫폼 사용
 - **이후 (Vercel)**: `https://your-app.vercel.app/api/auth/login`
 
 ### 프론트엔드 API 호출 수정 필요

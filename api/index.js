@@ -45,9 +45,7 @@ const documentRoutes = require('./src/routes/documents');
 const errorHandler = require('./src/middleware/errorHandler');
 
 const app = express();
-// Railway 환경에서는 Railway가 지정한 포트(process.env.PORT)를 사용하고,
-// 만약 없다면(로컬 개발 환경이면) 5000번 포트를 사용합니다.
-// Force redeploy to fix port issue
+// 환경 변수에서 PORT를 사용하고, 만약 없다면 5000번 포트를 사용
 const PORT = process.env.PORT || 5000;
 
 // Validate required environment variables
@@ -64,7 +62,7 @@ if (missingEnvVars.length > 0) {
 
     if (process.env.NODE_ENV === 'production') {
         console.error('❌ Production mode requires all environment variables to be set.');
-        console.error('❌ Please check Railway environment variables configuration.');
+        console.error('❌ Please check environment variables configuration.');
         process.exit(1);
     } else {
         console.warn('⚠️  Using default values for development. Please set these in production.');
@@ -84,14 +82,14 @@ if (missingPostgresVars.length > 0) {
 
     if (process.env.NODE_ENV === 'production') {
         console.error('❌ Production mode requires all PostgreSQL environment variables to be set.');
-        console.error('❌ Please check Railway PostgreSQL service configuration.');
+        console.error('❌ Please check PostgreSQL service configuration.');
         process.exit(1);
     } else {
         console.warn('⚠️  PostgreSQL environment variables missing for development.');
     }
 }
 
-// Trust proxy for Railway deployment
+// Trust proxy for production deployment
 app.set('trust proxy', 1);
 
 // Security middleware

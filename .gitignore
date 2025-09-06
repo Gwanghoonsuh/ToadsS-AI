@@ -16,7 +16,6 @@ node_modules/
 !package.json
 !package-lock.json
 !tsconfig.json
-!railway.json
 !server/shippingaiagent-470610-b4b13d7f087d.json
 !shippingaiagent-470610-b4b13d7f087d.json
 

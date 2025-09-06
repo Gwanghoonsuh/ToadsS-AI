@@ -43,7 +43,7 @@ class GoogleCloudService {
         }
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
+        this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
 
         // 파싱된 서비스 계정 키를 직접 credentials로 전달
@@ -318,7 +318,7 @@ class GoogleCloudService {
             
             // Vertex AI Gemini 모델 사용 (preview 제거, 안정적인 모델 사용)
             const model = this.vertexAI.getGenerativeModel({
-                model: "gemini-1.5-flash", // 빠르고 안정적인 버전 사용
+                model: "gemini-1.5-flash-001", // 빠르고 안정적인 버전 사용
                 systemInstruction: {
                     parts: [{ text: systemPrompt }]
                 },

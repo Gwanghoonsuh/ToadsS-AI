@@ -1,7 +1,7 @@
 const { Pool } = require('pg');
 
 // PostgreSQL 연결 설정
-// Railway 환경 변수 참조 방식 사용
+// PostgreSQL 환경 변수 참조
 const pool = new Pool({
     host: process.env.PGHOST,
     port: process.env.PGPORT,
@@ -23,7 +23,7 @@ const pool = new Pool({
 pool.on('connect', (client) => {
     console.log('✅ PostgreSQL database connected');
     console.log(`📊 Connection info: ${client.host}:${client.port}/${client.database}`);
-    console.log(`🔧 Using Railway environment variables: PGHOST=${process.env.PGHOST}, PGPORT=${process.env.PGPORT}, PGUSER=${process.env.PGUSER}, PGDATABASE=${process.env.PGDATABASE}`);
+    console.log(`🔧 Using PostgreSQL environment variables: PGHOST=${process.env.PGHOST}, PGPORT=${process.env.PGPORT}, PGUSER=${process.env.PGUSER}, PGDATABASE=${process.env.PGDATABASE}`);
 });
 
 pool.on('error', (err) => {
