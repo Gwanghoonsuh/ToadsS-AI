@@ -25,13 +25,14 @@ try {
 class GoogleCloudService {
     constructor() {
         // 이 로그는 새 코드가 실행되고 있다는 증거입니다.
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v14 - Final Auth Fix 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v15 - JSON vs File Path Fix 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
         
-        // isTestMode는 환경 변수 존재 여부로만 판단
-        this.isTestMode = !process.env.GOOGLE_APPLICATION_CREDENTIALS;
+        // 환경 변수 확인 및 테스트 모드 판단
+        const hasCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_CLOUD_CREDENTIALS;
+        this.isTestMode = !hasCredentials;
 
         if (this.isTestMode) {
             console.log('🔧 Google Cloud Service running in TEST MODE.');
@@ -39,9 +40,19 @@ class GoogleCloudService {
         }
 
         try {
-            // 모든 Google Cloud 클라이언트를 인증 옵션 없이 초기화합니다.
-            // 라이브러리가 GOOGLE_APPLICATION_CREDENTIALS 환경 변수를 자동으로 찾아 처리합니다.
-            this.storage = new Storage();
+            // GOOGLE_CLOUD_CREDENTIALS가 있으면 JSON으로 파싱해서 사용
+            if (process.env.GOOGLE_CLOUD_CREDENTIALS) {
+                console.log('✅ Using GOOGLE_CLOUD_CREDENTIALS (JSON format)');
+                const credentials = JSON.parse(process.env.GOOGLE_CLOUD_CREDENTIALS);
+                this.storage = new Storage({ 
+                    credentials: credentials,
+                    projectId: this.projectId 
+                });
+            } else {
+                // GOOGLE_APPLICATION_CREDENTIALS는 파일 경로로 처리
+                console.log('✅ Using GOOGLE_APPLICATION_CREDENTIALS (file path)');
+                this.storage = new Storage();
+            }
             
             if (VertexAI) {
                 this.vertexAI = new VertexAI({ project: this.projectId, location: this.region });
