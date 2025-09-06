@@ -24,11 +24,14 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v11 - Shared Bucket & Private Key Fix 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v12 - Asia Southeast Region 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
+        this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-southeast1';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
+        
+        console.log(`🌏 Google Cloud Region: ${this.region}`);
+        console.log(`🏗️ Project ID: ${this.projectId}`);
         
         // isTestMode는 환경 변수 존재 여부로만 판단
         this.isTestMode = !process.env.GOOGLE_APPLICATION_CREDENTIALS;
