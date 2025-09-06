@@ -24,7 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v13 - Asia Northeast Region (Gemini Support) 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v14 - Gemini 2.0 Flash Upgrade 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast1';
@@ -388,9 +388,9 @@ class GoogleCloudService {
                 throw new Error('Failed to generate system prompt');
             }
             
-            // Vertex AI Gemini 모델 사용 (preview 제거, 안정적인 모델 사용)
+            // Vertex AI Gemini 2.0 Flash 모델 사용 (최신 성능 최적화)
             const model = this.vertexAI.getGenerativeModel({
-                model: "gemini-1.5-flash-001", // 빠르고 안정적인 버전 사용
+                model: "gemini-2.0-flash-exp", // 최신 Gemini 2.0 Flash 모델
                 systemInstruction: {
                     parts: [{ text: systemPrompt }]
                 },
@@ -424,9 +424,9 @@ class GoogleCloudService {
                 console.warn('⚠️ Primary model failed, trying fallback model...', modelError.message);
                 
                 try {
-                    // Fallback to basic gemini-1.0-pro model (systemInstruction 없이)
+                    // Fallback to stable gemini-1.5-flash model (systemInstruction 없이)
                     const fallbackModel = this.vertexAI.getGenerativeModel({
-                        model: "gemini-1.0-pro",
+                        model: "gemini-1.5-flash-001",
                         generationConfig: {
                             maxOutputTokens: 2048,
                             temperature: 0.2,
@@ -502,7 +502,7 @@ class GoogleCloudService {
                 console.error(`🚨 Google Auth Error - Project: ${this.projectId}, Region: ${this.region}`);
             } else if (error.message.includes('404') || error.message.includes('Not Found')) {
                 fallbackMessage = "죄송하지만 현재 AI 모델을 사용할 수 없습니다. 지역 설정을 확인하고 있습니다.";
-                console.error(`🚨 Model availability issue - Region: ${this.region}, Model: gemini-1.5-flash`);
+                console.error(`🚨 Model availability issue - Region: ${this.region}, Model: gemini-2.0-flash`);
             } else if (error.message.includes('quota')) {
                 fallbackMessage = "죄송하지만 현재 서비스 이용량이 많아 잠시 후 다시 시도해주세요.";
             } else if (error.message.includes('authentication') || error.message.includes('credentials')) {
