@@ -24,8 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        // 이 로그는 새 코드가 실행되고 있다는 증거입니다.
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v7 - Final Auth Fix 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v10 - Final JSON Credentials Fix 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
@@ -40,23 +39,71 @@ class GoogleCloudService {
         }
 
         try {
-            // 모든 Google Cloud 클라이언트를 인증 옵션 없이 초기화합니다.
-            // 라이브러리가 GOOGLE_APPLICATION_CREDENTIALS 환경 변수를 자동으로 찾아 처리합니다.
-            this.storage = new Storage();
+            let credentials = null;
+            const credentialsValue = process.env.GOOGLE_APPLICATION_CREDENTIALS;
             
-            if (VertexAI) {
-                this.vertexAI = new VertexAI({ project: this.projectId, location: this.region });
-            }
-            
-            if (DocumentServiceClient) {
-                this.documentClient = new DocumentServiceClient();
+            // JSON 문자열인지 파일 경로인지 확인
+            if (credentialsValue.startsWith('{')) {
+                // JSON 문자열인 경우 파싱해서 credentials 객체로 사용
+                try {
+                    credentials = JSON.parse(credentialsValue);
+                    console.log('✅ Using JSON credentials from environment variable');
+                } catch (parseError) {
+                    console.error('❌ Failed to parse JSON credentials:', parseError.message);
+                    throw parseError;
+                }
+            } else {
+                console.log('✅ Using file path credentials from environment variable');
+                // 파일 경로인 경우 자동 감지 사용
             }
 
-            this.predictionClient = new PredictionServiceClient({
-                apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
-            });
-            
-            console.log('✅ All Google Cloud clients initialized automatically.');
+            // credentials가 있으면 명시적으로 전달, 없으면 자동 감지
+            if (credentials) {
+                this.storage = new Storage({ 
+                    credentials: credentials,
+                    projectId: this.projectId 
+                });
+                
+                if (VertexAI) {
+                    this.vertexAI = new VertexAI({ 
+                        project: this.projectId, 
+                        location: this.region,
+                        googleAuthOptions: { credentials: credentials }
+                    });
+                }
+                
+                if (DocumentServiceClient) {
+                    this.documentClient = new DocumentServiceClient({
+                        credentials: credentials,
+                        projectId: this.projectId
+                    });
+                }
+
+                this.predictionClient = new PredictionServiceClient({
+                    apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
+                    credentials: credentials,
+                    projectId: this.projectId
+                });
+                
+                console.log('✅ All Google Cloud clients initialized with JSON credentials.');
+            } else {
+                // 파일 경로 방식 - 자동 감지
+                this.storage = new Storage();
+                
+                if (VertexAI) {
+                    this.vertexAI = new VertexAI({ project: this.projectId, location: this.region });
+                }
+                
+                if (DocumentServiceClient) {
+                    this.documentClient = new DocumentServiceClient();
+                }
+
+                this.predictionClient = new PredictionServiceClient({
+                    apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
+                });
+                
+                console.log('✅ All Google Cloud clients initialized with file path credentials.');
+            }
 
         } catch (error) {
             console.error('❌ CRITICAL: Google Cloud client initialization FAILED.', error);
