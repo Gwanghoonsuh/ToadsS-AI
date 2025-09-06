@@ -24,7 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v10 - Final JSON Credentials Fix 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v11 - Shared Bucket & Private Key Fix 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
@@ -47,7 +47,17 @@ class GoogleCloudService {
                 // JSON 문자열인 경우 파싱해서 credentials 객체로 사용
                 try {
                     credentials = JSON.parse(credentialsValue);
+                    
+                    // private_key의 줄바꿈 문제 해결
+                    if (credentials.private_key && typeof credentials.private_key === 'string') {
+                        // 줄바꿈이 이스케이프되지 않은 경우 수정
+                        credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+                        console.log('🔧 Fixed private_key newline characters');
+                    }
+                    
                     console.log('✅ Using JSON credentials from environment variable');
+                    console.log(`   - Service account email: ${credentials.client_email}`);
+                    console.log(`   - Project ID: ${credentials.project_id}`);
                 } catch (parseError) {
                     console.error('❌ Failed to parse JSON credentials:', parseError.message);
                     throw parseError;
@@ -117,21 +127,24 @@ class GoogleCloudService {
             return null;
         }
 
-        const bucketName = `toads-ai-agent-${customerId}`;
+        // 공유 버킷 사용 (모든 고객이 같은 버킷, 폴더로 구분)
+        const bucketName = 'toads-shipping-ai-docs';
         const bucket = this.storage.bucket(bucketName);
 
         try {
             const [exists] = await bucket.exists();
             if (!exists) {
-                console.log(`📦 Creating bucket: ${bucketName}`);
+                console.log(`📦 Creating shared bucket: ${bucketName}`);
                 await bucket.create({
                     location: this.region,
                     storageClass: 'STANDARD'
                 });
-                console.log(`✅ Bucket created: ${bucketName}`);
+                console.log(`✅ Shared bucket created: ${bucketName}`);
+            } else {
+                console.log(`📁 Using shared bucket: ${bucketName} for customer ${customerId}`);
             }
         } catch (error) {
-            console.error(`❌ Error managing bucket ${bucketName}:`, error);
+            console.error(`❌ Error managing shared bucket ${bucketName}:`, error);
             throw new Error(`Failed to access bucket: ${error.message}`);
         }
 
@@ -543,6 +556,58 @@ class GoogleCloudService {
             console.error(`❌ Error removing document from data store: ${error.message}`);
             // 데이터 스토어 삭제 실패는 치명적이지 않음 (파일은 이미 삭제됨)
             return { success: false, error: error.message, warning: 'File deleted but data store cleanup failed' };
+        }
+    }
+
+    async initializeCustomer(customerId) {
+        console.log(`📁 Initializing customer folder for customer ${customerId}...`);
+        
+        if (this.isTestMode) {
+            console.log('🔧 Test mode: Skipping customer folder initialization');
+            return { success: true, message: 'Test mode - customer folder initialization skipped' };
+        }
+
+        try {
+            // 메인 공유 버킷 사용 (toads-shipping-ai-docs)
+            const bucketName = 'toads-shipping-ai-docs';
+            const bucket = this.storage.bucket(bucketName);
+            
+            // 버킷 존재 확인
+            const [bucketExists] = await bucket.exists();
+            if (!bucketExists) {
+                console.log(`📦 Bucket ${bucketName} does not exist. Creating...`);
+                await bucket.create({
+                    location: this.region,
+                    storageClass: 'STANDARD'
+                });
+                console.log(`✅ Bucket created: ${bucketName}`);
+            }
+
+            // 고객별 폴더 생성 (빈 파일로 폴더 구조 생성)
+            const customerFolder = `customer-${customerId}/`;
+            const initFile = `${customerFolder}.init`;
+            
+            const file = bucket.file(initFile);
+            const [fileExists] = await file.exists();
+            
+            if (!fileExists) {
+                await file.save('', {
+                    metadata: {
+                        contentType: 'text/plain',
+                        customerId: customerId.toString(),
+                        purpose: 'folder_initialization'
+                    }
+                });
+                console.log(`✅ Customer folder created: ${customerFolder}`);
+            } else {
+                console.log(`📁 Customer folder already exists: ${customerFolder}`);
+            }
+
+            return { success: true, message: `Customer folder initialized: ${customerFolder}` };
+        } catch (error) {
+            console.error(`❌ Error initializing customer folder for ${customerId}:`, error);
+            // 폴더 초기화 실패는 치명적이지 않음 (로그인은 계속 진행)
+            return { success: false, error: error.message, warning: 'Customer folder initialization failed but login continues' };
         }
     }
 }
