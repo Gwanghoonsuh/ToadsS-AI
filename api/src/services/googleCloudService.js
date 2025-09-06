@@ -24,7 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v22 - New Project and Bucket");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v23 - Vertex AI Search Integration");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
@@ -32,7 +32,8 @@ class GoogleCloudService {
         
         console.log(`🌏 Google Cloud Region: ${this.region}`);
         console.log(`🏗️ Project ID: ${this.projectId}`);
-        
+        console.log(`🔍 Data Store ID: ${this.dataStoreId}`);
+
         this.isTestMode = !process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
         if (this.isTestMode) {
@@ -60,12 +61,16 @@ class GoogleCloudService {
                 { credentials, projectId: this.projectId } : 
                 { projectId: this.projectId };
 
+            const documentClientConfig = credentials ? 
+                { credentials, apiEndpoint: 'global-discoveryengine.googleapis.com' } :
+                { apiEndpoint: 'global-discoveryengine.googleapis.com' };
+
             this.storage = new Storage(clientConfig);
             if (VertexAI) {
                 this.vertexAI = new VertexAI({ project: this.projectId, location: this.region, googleAuthOptions: credentials ? { credentials } : {} });
             }
             if (DocumentServiceClient) {
-                this.documentClient = new DocumentServiceClient(clientConfig);
+                this.documentClient = new DocumentServiceClient(documentClientConfig);
             }
             this.predictionClient = new PredictionServiceClient({ apiEndpoint: `${this.region}-aiplatform.googleapis.com`, ...clientConfig });
 
@@ -138,23 +143,61 @@ class GoogleCloudService {
     }
 
     async searchDocuments(customerId, query, maxResults = 5) {
-        if (this.isTestMode) return [];
-        const bucket = await this.getCustomerBucket(customerId);
-        if (!bucket) return [];
-        const [files] = await bucket.getFiles({ prefix: `customer-${customerId}/` });
-        if (files.length === 0) return [];
+        if (this.isTestMode || !DocumentServiceClient || !this.dataStoreId) {
+            console.log('🔧 Test mode or missing configuration for document search. Returning empty results.');
+            return [];
+        }
+    
+        console.log(`🔍 Starting document search in data store: ${this.dataStoreId} for query: "${query}"`);
+    
+        const servingConfig = `projects/${this.projectId}/locations/global/collections/default_collection/dataStores/${this.dataStoreId}/servingConfigs/default_serving_config`;
+    
+        try {
+            const request = {
+                servingConfig: servingConfig,
+                query: query,
+                pageSize: maxResults,
+                contentSearchSpec: {
+                    snippetSpec: {
+                        returnSnippet: true,
+                    },
+                    summarySpec: {
+                        summaryResultCount: 3,
+                        ignoreAdversarialQuery: true,
+                        includeCitations: false,
+                    },
+                },
+            };
 
-        // Dummy search logic
-        const searchResults = files.map((file, index) => ({
-            id: `${customerId}-${index}`,
-            title: file.metadata.originalName || file.name,
-            content: `Content from ${file.metadata.originalName || file.name}. (This is a placeholder).`,
-            uri: `gs://${bucket.name}/${file.name}`,
-            fileName: file.name,
-        })).slice(0, maxResults);
-
-        console.log(`✅ Returning ${searchResults.length} secure search results for customer ${customerId}`);
-        return searchResults;
+            const [response] = await this.documentClient.search(request);
+    
+            if (!response || !response.results) {
+                console.log('🟡 Search returned no results from Vertex AI Search.');
+                return [];
+            }
+    
+            const searchResults = response.results.map(result => {
+                const doc = result.document;
+                const snippet = doc.derivedStructData?.extractive_answers?.[0]?.content || 
+                                doc.derivedStructData?.snippets?.[0]?.snippet || 
+                                'No relevant snippet found.';
+                
+                return {
+                    id: doc.id,
+                    title: doc.derivedStructData?.title || doc.name.split('/').pop(),
+                    content: snippet,
+                    uri: doc.uri,
+                    fileName: doc.name.split('/').pop(),
+                };
+            });
+    
+            console.log(`✅ Returning ${searchResults.length} secure search results from Vertex AI Search.`);
+            return searchResults;
+    
+        } catch (error) {
+            console.error('❌ Error during Vertex AI Search:', error);
+            return [];
+        }
     }
 
     async generateAIResponse(query, context, customerId) {
