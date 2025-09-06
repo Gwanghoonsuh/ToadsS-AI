@@ -24,7 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v24 - Fix Delete Function");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v25 - Fix Upload Function");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
@@ -129,6 +129,21 @@ class GoogleCloudService {
         const fileName = `customer-${customerId}/${Date.now()}-${Math.random().toString(36).substring(2, 8)}-${originalName}`;
         await bucket.file(fileName).save(file.buffer, { metadata: { contentType: file.mimetype, originalName, customerId: customerId.toString() } });
         return { fileName, gcsUri: `gs://${bucket.name}/${fileName}` };
+    }
+
+    async addDocumentToDataStore(customerId, fileName) {
+        if (this.isTestMode || !DocumentServiceClient || !this.dataStoreId) {
+            console.log('🔧 Test mode or missing configuration for adding document. Skipping.');
+            return { success: true, warning: null };
+        }
+        // For Cloud Storage data stores, adding the file to the bucket is enough.
+        // The data store will sync automatically. We just return a warning about the delay.
+        console.log(`ℹ️ Document ${fileName} was uploaded to Cloud Storage.`);
+        console.log(`   - It will be added to the search index automatically. This may take some time.`);
+        return {
+            success: true,
+            warning: '문서가 스토리지에 업로드되었습니다. 검색에 반영되기까지 다소 시간이 걸릴 수 있습니다.'
+        };
     }
 
     async deleteFile(customerId, fileName) {
