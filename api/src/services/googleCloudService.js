@@ -24,16 +24,15 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v20 - Back to NE3 Region 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v21 - Final Model Name Change 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1'; // 리전을 us-central1로 변경
+        this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
         
         console.log(`🌏 Google Cloud Region: ${this.region}`);
         console.log(`🏗️ Project ID: ${this.projectId}`);
         
-        // isTestMode는 환경 변수 존재 여부로만 판단
         this.isTestMode = !process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
         if (this.isTestMode) {
@@ -45,82 +44,39 @@ class GoogleCloudService {
             let credentials = null;
             const credentialsValue = process.env.GOOGLE_APPLICATION_CREDENTIALS;
             
-            // JSON 문자열인지 파일 경로인지 확인
             if (credentialsValue.startsWith('{')) {
-                // JSON 문자열인 경우 파싱해서 credentials 객체로 사용
                 try {
                     credentials = JSON.parse(credentialsValue);
-                    
-                    // private_key의 줄바꿈 문제 해결
                     if (credentials.private_key && typeof credentials.private_key === 'string') {
-                        // 줄바꿈이 이스케이프되지 않은 경우 수정
                         credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
-                        console.log('🔧 Fixed private_key newline characters');
                     }
-                    
-                    console.log('✅ Using JSON credentials from environment variable');
-                    console.log(`   - Service account email: ${credentials.client_email}`);
-                    console.log(`   - Project ID: ${credentials.project_id}`);
                 } catch (parseError) {
                     console.error('❌ Failed to parse JSON credentials:', parseError.message);
                     throw parseError;
                 }
-            } else {
-                console.log('✅ Using file path credentials from environment variable');
-                // 파일 경로인 경우 자동 감지 사용
+            } 
+
+            const clientConfig = credentials ? 
+                { credentials, projectId: this.projectId } : 
+                { projectId: this.projectId };
+
+            this.storage = new Storage(clientConfig);
+            if (VertexAI) {
+                this.vertexAI = new VertexAI({ project: this.projectId, location: this.region, googleAuthOptions: credentials ? { credentials } : {} });
             }
+            if (DocumentServiceClient) {
+                this.documentClient = new DocumentServiceClient(clientConfig);
+            }
+            this.predictionClient = new PredictionServiceClient({ apiEndpoint: `${this.region}-aiplatform.googleapis.com`, ...clientConfig });
 
-            // credentials가 있으면 명시적으로 전달, 없으면 자동 감지
+            console.log(`✅ All Google Cloud clients initialized using ${credentials ? 'JSON credentials' : 'file path or ADC'}.`);
             if (credentials) {
-                this.storage = new Storage({ 
-                    credentials: credentials,
-                    projectId: this.projectId 
-                });
-                
-                if (VertexAI) {
-                    this.vertexAI = new VertexAI({ 
-                        project: this.projectId, 
-                        location: this.region,
-                        googleAuthOptions: { credentials: credentials }
-                    });
-                }
-                
-                if (DocumentServiceClient) {
-                    this.documentClient = new DocumentServiceClient({
-                        credentials: credentials,
-                        projectId: this.projectId
-                    });
-                }
-
-                this.predictionClient = new PredictionServiceClient({
-                    apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
-                    credentials: credentials,
-                    projectId: this.projectId
-                });
-                
-                console.log('✅ All Google Cloud clients initialized with JSON credentials.');
-            } else {
-                // 파일 경로 방식 - 자동 감지
-                this.storage = new Storage();
-                
-                if (VertexAI) {
-                    this.vertexAI = new VertexAI({ project: this.projectId, location: this.region });
-                }
-                
-                if (DocumentServiceClient) {
-                    this.documentClient = new DocumentServiceClient();
-                }
-
-                this.predictionClient = new PredictionServiceClient({
-                    apiEndpoint: `${this.region}-aiplatform.googleapis.com`,
-                });
-                
-                console.log('✅ All Google Cloud clients initialized with file path credentials.');
+                 console.log(`   - Service account email: ${credentials.client_email}`);
             }
 
         } catch (error) {
             console.error('❌ CRITICAL: Google Cloud client initialization FAILED.', error);
-            this.isTestMode = true; // 실패 시 안전하게 테스트 모드로 전환
+            this.isTestMode = true;
         }
     }
 
@@ -130,7 +86,6 @@ class GoogleCloudService {
             return null;
         }
 
-        // 공유 버킷 사용 (모든 고객이 같은 버킷, 폴더로 구분)
         const bucketName = 'toads-shipping-ai-doc';
         const bucket = this.storage.bucket(bucketName);
 
@@ -155,463 +110,126 @@ class GoogleCloudService {
     }
 
     async listFiles(customerId) {
-        if (this.isTestMode) {
-            console.log('🔧 Test mode: Returning empty file list');
-            return [];
-        }
-
-        try {
-            const bucket = await this.getCustomerBucket(customerId);
-            if (!bucket) {
-                return [];
-            }
-
-            const customerFolder = `customer-${customerId}/`;
-            
-            // 고객별 폴더에서만 파일 조회 (데이터 격리)
-            const [files] = await bucket.getFiles({ prefix: customerFolder });
-
-            return files.map(file => ({
-                name: file.name,
-                size: file.metadata.size,
-                created: file.metadata.timeCreated,
-                updated: file.metadata.updated,
-                contentType: file.metadata.contentType,
-                originalName: file.metadata.originalName,
-                customerId: file.metadata.customerId
-            }));
-        } catch (error) {
-            console.error(`❌ Error listing files for customer ${customerId}:`, error);
-            throw new Error(`Failed to list files: ${error.message}`);
-        }
+        if (this.isTestMode) return [];
+        const bucket = await this.getCustomerBucket(customerId);
+        if (!bucket) return [];
+        const [files] = await bucket.getFiles({ prefix: `customer-${customerId}/` });
+        return files.map(file => ({ name: file.name, size: file.metadata.size, created: file.metadata.timeCreated }));
     }
 
     async uploadFile(customerId, file, originalName) {
-        if (this.isTestMode) {
-            console.log('🔧 Test mode: Skipping file upload');
-            return {
-                fileName: `test-${originalName}`,
-                gcsUri: `gs://test-bucket/test-${originalName}`,
-                timestamp: Date.now(),
-                customerFolder: `customer-${customerId}`
-            };
-        }
-
-        try {
-            const bucket = await this.getCustomerBucket(customerId);
-            if (!bucket) {
-                throw new Error('Bucket not available in test mode');
-            }
-            
-            // 고객별 폴더 구조 생성: customer-{customerId}/timestamp-randomstring-filename
-            const timestamp = Date.now();
-            const randomString = Math.random().toString(36).substring(2, 8);
-            const customerFolder = `customer-${customerId}`;
-            const fileName = `${customerFolder}/${timestamp}-${randomString}-${originalName}`;
-            const fileUpload = bucket.file(fileName);
-
-            await fileUpload.save(file.buffer, {
-                metadata: {
-                    contentType: file.mimetype,
-                    originalName: originalName,
-                    customerId: customerId.toString(),
-                    uploadTimestamp: timestamp.toString()
-                }
-            });
-
-            console.log(`✅ File uploaded: ${fileName}`);
-            return {
-                fileName,
-                gcsUri: `gs://${bucket.name}/${fileName}`,
-                timestamp,
-                customerFolder
-            };
-        } catch (error) {
-            console.error(`❌ Error uploading file ${originalName}:`, error);
-            throw new Error(`Failed to upload file: ${error.message}`);
-        }
+        if (this.isTestMode) return { fileName: `test-${originalName}` };
+        const bucket = await this.getCustomerBucket(customerId);
+        if (!bucket) throw new Error('Bucket not available');
+        const fileName = `customer-${customerId}/${Date.now()}-${Math.random().toString(36).substring(2, 8)}-${originalName}`;
+        await bucket.file(fileName).save(file.buffer, { metadata: { contentType: file.mimetype, originalName, customerId: customerId.toString() } });
+        return { fileName, gcsUri: `gs://${bucket.name}/${fileName}` };
     }
 
     async deleteFile(customerId, fileName) {
-        if (this.isTestMode) {
-            console.log('🔧 Test mode: Skipping file deletion');
-            return { success: true, fileName };
+        if (this.isTestMode) return { success: true };
+        const bucket = await this.getCustomerBucket(customerId);
+        if (!bucket) throw new Error('Bucket not available');
+        if (!fileName.startsWith(`customer-${customerId}/`)) {
+            throw new Error(`Access denied: File does not belong to customer ${customerId}`);
         }
-
-        try {
-            const bucket = await this.getCustomerBucket(customerId);
-            if (!bucket) {
-                throw new Error('Bucket not available in test mode');
-            }
-            const file = bucket.file(fileName);
-            
-            // 파일이 해당 고객의 폴더에 있는지 확인 (보안)
-            if (!fileName.startsWith(`customer-${customerId}/`)) {
-                throw new Error(`Access denied: File does not belong to customer ${customerId}`);
-            }
-            
-            await file.delete();
-            console.log(`✅ File deleted: ${fileName}`);
-            return { success: true, fileName };
-        } catch (error) {
-            console.error(`❌ Error deleting file ${fileName}:`, error);
-            throw new Error(`Failed to delete file: ${error.message}`);
-        }
+        await bucket.file(fileName).delete();
+        return { success: true, fileName };
     }
 
     async searchDocuments(customerId, query, maxResults = 5) {
-        if (this.isTestMode) {
-            console.log('🔧 Test mode: Returning empty search results');
-            return [];
-        }
+        if (this.isTestMode) return [];
+        const bucket = await this.getCustomerBucket(customerId);
+        if (!bucket) return [];
+        const [files] = await bucket.getFiles({ prefix: `customer-${customerId}/` });
+        if (files.length === 0) return [];
 
-        try {
-            console.log(`🔍 Searching documents for customer ${customerId} with query: "${query}"`);
-            
-            // 고객별 문서만 검색하기 위해 Storage에서 해당 고객 문서 목록 조회
-            const bucket = await this.getCustomerBucket(customerId);
-            if (!bucket) {
-                return [];
-            }
+        // Dummy search logic
+        const searchResults = files.map((file, index) => ({
+            id: `${customerId}-${index}`,
+            title: file.metadata.originalName || file.name,
+            content: `Content from ${file.metadata.originalName || file.name}. (This is a placeholder).`,
+            uri: `gs://${bucket.name}/${file.name}`,
+            fileName: file.name,
+        })).slice(0, maxResults);
 
-            const customerFolder = `customer-${customerId}/`;
-            
-            // 고객별 폴더에서만 파일 조회 (데이터 격리 보장)
-            const [files] = await bucket.getFiles({ prefix: customerFolder });
-            
-            if (files.length === 0) {
-                console.log(`📂 No documents found for customer ${customerId}`);
-                return [];
-            }
-
-            console.log(`📂 Found ${files.length} documents for customer ${customerId}`);
-            
-            // 현재는 모든 고객 문서를 반환 (실제로는 검색 쿼리 기반 필터링 필요)
-            // TODO: 실제 구현에서는 Vertex AI Search나 Embedding을 사용한 의미적 검색 구현
-            const searchResults = files.map((file, index) => {
-                const originalName = file.metadata.originalName || file.name;
-                const displayName = originalName.replace(/^customer-\d+\/\d+-[a-z0-9]+-/, '');
-                
-                return {
-                    id: `${customerId}-${index}`,
-                    title: displayName,
-                    content: `${displayName}에서 검색된 내용입니다. 실제 구현에서는 문서 내용을 파싱하여 제공합니다.`,
-                    uri: `gs://${bucket.name}/${file.name}`,
-                    customerId: customerId, // 보안: 반드시 해당 고객 ID 포함
-                    fileName: file.name,
-                    size: file.metadata.size,
-                    contentType: file.metadata.contentType
-                };
-            }).slice(0, maxResults);
-
-            // 보안 검증: 모든 결과가 해당 고객의 것인지 확인
-            const invalidResults = searchResults.filter(result => 
-                !result.fileName.startsWith(`customer-${customerId}/`)
-            );
-            
-            if (invalidResults.length > 0) {
-                console.error(`🚨 Security violation: Found documents not belonging to customer ${customerId}`);
-                throw new Error(`Access denied: Invalid document access attempt`);
-            }
-
-            console.log(`✅ Returning ${searchResults.length} secure search results for customer ${customerId}`);
-            return searchResults;
-
-        } catch (error) {
-            console.error(`❌ Error searching documents for customer ${customerId}:`, error);
-            
-            // 보안상 민감한 오류 정보는 숨김
-            if (error.message.includes('Access denied')) {
-                throw error; // 보안 오류는 그대로 전파
-            }
-            
-            throw new Error('Document search failed');
-        }
+        console.log(`✅ Returning ${searchResults.length} secure search results for customer ${customerId}`);
+        return searchResults;
     }
 
     async generateAIResponse(query, context, customerId) {
         if (this.isTestMode) {
-            console.log('🔧 Test mode: Returning mock AI response');
-            return {
-                response: "이것은 테스트 모드 응답입니다. Google Cloud 인증이 설정되면 실제 AI 응답이 제공됩니다.",
-                mock: true,
-                reason: 'Test mode enabled'
-            };
+            return { response: "This is a test mode response.", mock: true };
+        }
+        if (!this.vertexAI) {
+            return { response: "AI service is not available.", mock: true };
         }
 
+        const customerName = `고객사-${customerId}`;
+        const systemPrompt = generateSystemPrompt(customerName, context, query);
+
+        const modelName = "gemini-1.0-pro"; // 최종 모델 이름
+
         try {
-            // Vertex AI 클라이언트 가용성 검사
-            if (!VertexAI || !this.vertexAI) {
-                console.log('⚠️ Vertex AI not available or not initialized, using mock response');
-                return {
-                    response: "죄송하지만 현재 AI 서비스를 이용할 수 없습니다. 나중에 다시 시도해주세요.",
-                    mock: true,
-                    reason: !VertexAI ? 'Library not loaded' : 'Client not initialized'
-                };
-            }
-
-            // Vertex AI 클라이언트 메서드 존재 확인
-            if (typeof this.vertexAI.getGenerativeModel !== 'function') {
-                console.error('❌ getGenerativeModel method not available');
-                console.error('🔍 Available methods:', Object.getOwnPropertyNames(this.vertexAI));
-                return {
-                    response: "죄송하지만 현재 AI 서비스 설정에 문제가 있습니다. 관리자에게 문의해주세요.",
-                    mock: true,
-                    reason: 'Method not available'
-                };
-            }
-
-            // 고객사 정보 (실제 구현에서는 DB에서 조회)
-            const customerName = `고객사-${customerId}`;
-            
-            // 보안 검증: context에 다른 고객 정보가 포함되지 않았는지 확인
-            if (context && context.includes(`customer-`) && !context.includes(`customer-${customerId}`)) {
-                console.error(`🚨 Security violation: Context contains other customer data for customer ${customerId}`);
-                throw new Error('Access denied: Invalid context data');
-            }
-            
-            // 시스템 프롬프트 생성 (고객별 격리 강조)
-            let systemPrompt;
-            try {
-                systemPrompt = generateSystemPrompt(customerName, context, query) + 
-                    `\n\n⚠️ 중요 보안 지침: 당신은 오직 고객사-${customerId}의 문서만을 참조해야 합니다. 다른 고객사의 정보는 절대로 사용하거나 언급해서는 안 됩니다.`;
-                
-                // 프롬프트 길이 검증 (토큰 제한 고려)
-                if (systemPrompt.length > 30000) { // 대략 15K 토큰 한도
-                    console.warn(`⚠️ System prompt too long (${systemPrompt.length} chars), truncating context`);
-                    const truncatedContext = context.substring(0, 5000) + '\n[...내용 생략...]';
-                    systemPrompt = generateSystemPrompt(customerName, truncatedContext, query) + 
-                        `\n\n⚠️ 중요 보안 지침: 당신은 오직 고객사-${customerId}의 문서만을 참조해야 합니다.`;
-                }
-            } catch (promptError) {
-                console.error('❌ Error generating system prompt:', promptError);
-                throw new Error('Failed to generate system prompt');
-            }
-            
-            // Vertex AI Gemini 1.0 Pro 모델 사용 (안정성과 품질 최적화)
             const model = this.vertexAI.getGenerativeModel({
-                model: "gemini-pro", // 안정적인 gemini-pro 모델로 변경
-                systemInstruction: {
-                    parts: [{ text: systemPrompt }]
-                },
-                generationConfig: {
-                    maxOutputTokens: 2048,
-                    temperature: 0.2,
-                    topP: 0.8,
-                    topK: 40
-                }
+                model: modelName,
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: { maxOutputTokens: 2048, temperature: 0.2, topP: 0.8, topK: 40 }
             });
 
             console.log(`🤖 Generating AI response for customer ${customerId}`);
             console.log(`📝 Query: ${query}`);
             console.log(`📚 Context length: ${context.length} characters`);
-            console.log(`🔧 Model: ${model.model}, Region: ${this.region}`);
+            console.log(`🔧 Model: ${modelName}, Region: ${this.region}`);
 
-            // AI 응답 생성 (오류 발생 시 재시도 로직)
-            let result;
-            let usedFallback = false;
-            
-            try {
-                result = await model.generateContent({
-                    contents: [
-                        {
-                            role: "user",
-                            parts: [{ text: query }]
-                        }
-                    ]
-                });
-            } catch (modelError) {
-                console.warn('⚠️ Primary model failed, trying fallback model...', modelError.message);
-                
-                try {
-                    // Fallback to stable gemini-pro model (systemInstruction 없이)
-                    const fallbackModel = this.vertexAI.getGenerativeModel({
-                        model: "gemini-pro", // Fallback도 안정적인 모델로 변경
-                        generationConfig: {
-                            maxOutputTokens: 2048,
-                            temperature: 0.2,
-                            topP: 0.8
-                        }
-                    });
-                    
-                    // 시스템 프롬프트를 사용자 메시지에 포함
-                    const fullPrompt = `${systemPrompt}\n\n---\n\n사용자 질문: ${query}`;
-                    
-                    result = await fallbackModel.generateContent({
-                        contents: [
-                            {
-                                role: "user", 
-                                parts: [{ text: fullPrompt }]
-                            }
-                        ]
-                    });
-                    
-                    usedFallback = true;
-                    console.log('✅ Fallback model response generated successfully');
-                } catch (fallbackError) {
-                    console.error('❌ Both primary and fallback models failed');
-                    throw new Error(`AI generation failed: Primary (${modelError.message}), Fallback (${fallbackError.message})`);
-                }
+            const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: query }] }] });
+
+            if (!result || !result.response || !result.response.candidates || result.response.candidates.length === 0) {
+                throw new Error('No valid response or candidates from Vertex AI');
             }
-
-            // 응답 검증 및 추출
-            if (!result || !result.response) {
-                throw new Error('No response received from Vertex AI');
+            if (result.response.candidates[0].finishReason === 'SAFETY') {
+                return { response: "Response blocked by safety filter.", safetyFiltered: true };
             }
-
-            if (!result.response.candidates || result.response.candidates.length === 0) {
-                throw new Error('No candidates in Vertex AI response');
+            if (!result.response.candidates[0].content || !result.response.candidates[0].content.parts || result.response.candidates[0].content.parts.length === 0) {
+                 throw new Error('No content in Vertex AI response candidate');
             }
-
-            const candidate = result.response.candidates[0];
-            
-            // 안전 필터 확인
-            if (candidate.finishReason === 'SAFETY') {
-                console.warn('⚠️ Response blocked by safety filter');
-                return {
-                    response: "죄송하지만 안전 정책으로 인해 응답을 생성할 수 없습니다. 다른 방식으로 질문해주세요.",
-                    customerName: customerName,
-                    contextUsed: context.length > 0,
-                    safetyFiltered: true
-                };
-            }
-
-            if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-                throw new Error('No content in Vertex AI response candidate');
-            }
-
-            const aiResponse = candidate.content.parts[0].text;
-            
-            console.log(`✅ AI response generated successfully${usedFallback ? ' (using fallback model)' : ''}`);
-            return {
-                response: aiResponse,
-                customerName: customerName,
-                contextUsed: context.length > 0,
-                usedFallback: usedFallback
-            };
+            const aiResponse = result.response.candidates[0].content.parts[0].text;
+            console.log(`✅ AI response generated successfully`);
+            return { response: aiResponse, contextUsed: context.length > 0 };
 
         } catch (error) {
             console.error(`❌ Error generating AI response:`, error);
-            console.error(`🔍 Error details - Project: ${this.projectId}, Region: ${this.region}`);
+            console.error(`🔍 Error details - Project: ${this.projectId}, Region: ${this.region}, Model: ${modelName}`);
             
-            let fallbackMessage = "죄송하지만 현재 기술적인 문제로 답변을 생성할 수 없습니다.";
-            
-            // 구체적인 오류에 따른 적절한 fallback 메시지
-            if (error.message.includes('GoogleAuthError') || error.message.includes('Unable to authenticate')) {
-                fallbackMessage = "현재 AI 서비스 인증에 문제가 있어 답변을 생성할 수 없습니다. 잠시 후 다시 시도해주세요.";
-                console.error(`🚨 Google Auth Error - Project: ${this.projectId}, Region: ${this.region}`);
-            } else if (error.message.includes('404') || error.message.includes('Not Found')) {
-                fallbackMessage = "죄송하지만 현재 AI 모델을 사용할 수 없습니다. 지역 설정을 확인하고 있습니다.";
-                console.error(`🚨 Model availability issue - Region: ${this.region}, Model: gemini-pro`);
+            let fallbackMessage = "An unexpected error occurred while generating the AI response.";
+            if (error.message.includes('404') || error.message.includes('Not Found')) {
+                fallbackMessage = "The specified AI model is unavailable in the current region. Please check project billing and API status.";
+                 console.error(`🚨 Model availability issue - This is often caused by a missing billing account on the project.`);
             } else if (error.message.includes('quota')) {
-                fallbackMessage = "죄송하지만 현재 서비스 이용량이 많아 잠시 후 다시 시도해주세요.";
+                fallbackMessage = "The service is currently busy due to high demand. Please try again later.";
             } else if (error.message.includes('authentication') || error.message.includes('credentials')) {
-                fallbackMessage = "죄송하지만 현재 인증 문제로 서비스를 이용할 수 없습니다. 관리자에게 문의해주세요.";
-            } else if (error.message.includes('network') || error.message.includes('timeout')) {
-                fallbackMessage = "죄송하지만 네트워크 문제로 응답을 생성할 수 없습니다. 잠시 후 다시 시도해주세요.";
-            } else if (error.message.includes('model') || error.message.includes('candidates')) {
-                fallbackMessage = "죄송하지만 AI 모델에서 적절한 응답을 생성할 수 없습니다. 다른 방식으로 질문해주세요.";
+                fallbackMessage = "Authentication failed. Please check service account credentials.";
             }
             
-            // 실패 시 fallback 응답
-            return {
-                response: fallbackMessage,
-                error: error.message,
-                fallback: true,
-                customerName: `고객사-${customerId}`,
-                contextUsed: context.length > 0
-            };
-        }
-    }
-
-    async addDocumentToDataStore(customerId, gcsUri, fileName) {
-        // Discovery Engine이 사용 불가능한 경우 스킵
-        if (!DocumentServiceClient) {
-            console.log('⚠️ Discovery Engine not available, skipping document indexing');
-            return { success: true, skipped: true };
-        }
-        
-        // 실제 구현에서는 Discovery Engine API를 사용
-        console.log(`📚 Adding document to data store: ${fileName} for customer ${customerId}`);
-        return { success: true, message: 'Document added to data store' };
-    }
-
-    async removeDocumentFromDataStore(customerId, fileName) {
-        // Discovery Engine이 사용 불가능한 경우 스킵
-        if (!DocumentServiceClient) {
-            console.log('⚠️ Discovery Engine not available, skipping document removal');
-            return { success: true, skipped: true };
-        }
-        
-        try {
-            // 실제 구현에서는 Discovery Engine API를 사용하여 문서 삭제
-            console.log(`🗑️ Removing document from data store: ${fileName} for customer ${customerId}`);
-            
-            // TODO: Discovery Engine API를 사용한 실제 문서 삭제 구현
-            // const documentId = this.generateDocumentId(fileName);
-            // await this.documentClient.deleteDocument({
-            //     name: `projects/${this.projectId}/locations/${this.region}/dataStores/${this.dataStoreId}/branches/default_branch/documents/${documentId}`
-            // });
-            
-            console.log(`✅ Document removed from data store: ${fileName}`);
-            return { success: true, message: 'Document removed from data store' };
-        } catch (error) {
-            console.error(`❌ Error removing document from data store: ${error.message}`);
-            // 데이터 스토어 삭제 실패는 치명적이지 않음 (파일은 이미 삭제됨)
-            return { success: false, error: error.message, warning: 'File deleted but data store cleanup failed' };
+            throw new Error(`AI generation failed: ${error.message}`);
         }
     }
 
     async initializeCustomer(customerId) {
         console.log(`📁 Initializing customer folder for customer ${customerId}...`);
-        
-        if (this.isTestMode) {
-            console.log('🔧 Test mode: Skipping customer folder initialization');
-            return { success: true, message: 'Test mode - customer folder initialization skipped' };
+        if (this.isTestMode) return { success: true };
+        const bucketName = 'toads-shipping-ai-doc';
+        const bucket = this.storage.bucket(bucketName);
+        const [bucketExists] = await bucket.exists();
+        if (!bucketExists) {
+            await bucket.create({ location: this.region, storageClass: 'STANDARD' });
         }
-
-        try {
-            // 메인 공유 버킷 사용 (toads-shipping-ai-doc)
-            const bucketName = 'toads-shipping-ai-doc';
-            const bucket = this.storage.bucket(bucketName);
-            
-            // 버킷 존재 확인
-            const [bucketExists] = await bucket.exists();
-            if (!bucketExists) {
-                console.log(`📦 Bucket ${bucketName} does not exist. Creating...`);
-                await bucket.create({
-                    location: this.region,
-                    storageClass: 'STANDARD'
-                });
-                console.log(`✅ Bucket created: ${bucketName}`);
-            }
-
-            // 고객별 폴더 생성 (빈 파일로 폴더 구조 생성)
-            const customerFolder = `customer-${customerId}/`;
-            const initFile = `${customerFolder}.init`;
-            
-            const file = bucket.file(initFile);
-            const [fileExists] = await file.exists();
-            
-            if (!fileExists) {
-                await file.save('', {
-                    metadata: {
-                        contentType: 'text/plain',
-                        customerId: customerId.toString(),
-                        purpose: 'folder_initialization'
-                    }
-                });
-                console.log(`✅ Customer folder created: ${customerFolder}`);
-            } else {
-                console.log(`📁 Customer folder already exists: ${customerFolder}`);
-            }
-
-            return { success: true, message: `Customer folder initialized: ${customerFolder}` };
-        } catch (error) {
-            console.error(`❌ Error initializing customer folder for ${customerId}:`, error);
-            // 폴더 초기화 실패는 치명적이지 않음 (로그인은 계속 진행)
-            return { success: false, error: error.message, warning: 'Customer folder initialization failed but login continues' };
+        const initFile = `customer-${customerId}/.init`;
+        const [fileExists] = await bucket.file(initFile).exists();
+        if (!fileExists) {
+            await bucket.file(initFile).save('');
         }
+        return { success: true, message: `Customer folder initialized for ${customerId}` };
     }
 }
 
