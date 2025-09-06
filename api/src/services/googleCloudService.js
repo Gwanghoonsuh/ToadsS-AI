@@ -24,7 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v21 - Final Model Name Change 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v22 - New Project and Bucket");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
@@ -86,7 +86,7 @@ class GoogleCloudService {
             return null;
         }
 
-        const bucketName = 'toads-shipping-ai-doc';
+        const bucketName = 'maritime-docs';
         const bucket = this.storage.bucket(bucketName);
 
         try {
@@ -168,7 +168,7 @@ class GoogleCloudService {
         const customerName = `고객사-${customerId}`;
         const systemPrompt = generateSystemPrompt(customerName, context, query);
 
-        const modelName = "gemini-1.0-pro"; // 최종 모델 이름
+        const modelName = "gemini-1.0-pro";
 
         try {
             const model = this.vertexAI.getGenerativeModel({
@@ -218,7 +218,7 @@ class GoogleCloudService {
     async initializeCustomer(customerId) {
         console.log(`📁 Initializing customer folder for customer ${customerId}...`);
         if (this.isTestMode) return { success: true };
-        const bucketName = 'toads-shipping-ai-doc';
+        const bucketName = 'maritime-docs';
         const bucket = this.storage.bucket(bucketName);
         const [bucketExists] = await bucket.exists();
         if (!bucketExists) {
