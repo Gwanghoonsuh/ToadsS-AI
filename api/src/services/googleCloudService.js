@@ -24,10 +24,10 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v12 - Asia Southeast Region 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v13 - Asia Northeast Region (Gemini Support) 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-southeast1';
+        this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast1';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
         
         console.log(`🌏 Google Cloud Region: ${this.region}`);
