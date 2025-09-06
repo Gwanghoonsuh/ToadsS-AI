@@ -24,7 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v15 - Asia Northeast 3 Region 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v16 - Stable Gemini 2.0 Flash 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
@@ -390,7 +390,7 @@ class GoogleCloudService {
             
             // Vertex AI Gemini 2.0 Flash 모델 사용 (최신 성능 최적화)
             const model = this.vertexAI.getGenerativeModel({
-                model: "gemini-2.0-flash-exp", // 최신 Gemini 2.0 Flash 모델
+                model: "gemini-2.0-flash", // 안정적인 Gemini 2.0 Flash 모델
                 systemInstruction: {
                     parts: [{ text: systemPrompt }]
                 },
