@@ -1,3 +1,4 @@
+
 const { Storage } = require('@google-cloud/storage');
 const { PredictionServiceClient } = require('@google-cloud/aiplatform');
 const { generateSystemPrompt, MARITIME_CONTEXT } = require('../prompts/system-prompt');
@@ -26,16 +27,18 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v30 - The very final fix, standard region and model");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v31 - Hardcoded final configuration");
 
-        this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        // Reverting to the most standard region and model combination
+        // *** HARDCODED FINAL CONFIGURATION ***
+        this.projectId = 'ai-agent-new-471314';
         this.region = 'us-central1'; 
-        this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
+        this.dataStoreId = 'new-maritime-docs-store';
+        this.bucketName = 'maritime-ai-bucket-471314';
         
-        console.log(`🌏 Google Cloud Region: ${this.region} (Final Attempt)`);
+        console.log(`🌏 Google Cloud Region: ${this.region}`);
         console.log(`🏗️ Project ID: ${this.projectId}`);
         console.log(`🔍 Data Store ID: ${this.dataStoreId}`);
+        console.log(`📦 Storage Bucket: ${this.bucketName}`);
 
         this.isTestMode = !process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
@@ -48,7 +51,7 @@ class GoogleCloudService {
             let credentials = null;
             const credentialsValue = process.env.GOOGLE_APPLICATION_CREDENTIALS;
             
-            if (credentialsValue.startsWith('{')) {
+            if (credentialsValue && credentialsValue.startsWith('{')) {
                 try {
                     credentials = JSON.parse(credentialsValue);
                     if (credentials.private_key && typeof credentials.private_key === 'string') {
@@ -97,23 +100,19 @@ class GoogleCloudService {
             return null;
         }
 
-        const bucketName = 'maritime-docs';
-        const bucket = this.storage.bucket(bucketName);
+        const bucket = this.storage.bucket(this.bucketName);
 
         try {
             const [exists] = await bucket.exists();
             if (!exists) {
-                console.log(`📦 Creating shared bucket: ${bucketName}`);
-                await bucket.create({
-                    location: this.region,
-                    storageClass: 'STANDARD'
-                });
-                console.log(`✅ Shared bucket created: ${bucketName}`);
+                console.error(`❌ CRITICAL: Bucket ${this.bucketName} does not exist! Please create it manually.`);
+                // In production, we might throw an error, but for resilience we log and continue
+                return null;
             } else {
-                console.log(`📁 Using shared bucket: ${bucketName} for customer ${customerId}`);
+                 console.log(`📁 Using existing bucket: ${this.bucketName} for customer ${customerId}`);
             }
         } catch (error) {
-            console.error(`❌ Error managing shared bucket ${bucketName}:`, error);
+            console.error(`❌ Error checking bucket ${this.bucketName}:`, error);
             throw new Error(`Failed to access bucket: ${error.message}`);
         }
 
@@ -241,7 +240,7 @@ class GoogleCloudService {
         const customerName = `고객사-${customerId}`;
         const systemPrompt = generateSystemPrompt(customerName, context, query);
 
-        const modelName = "gemini-pro"; // Using the most stable and generic model name
+        const modelName = "gemini-pro"; 
 
         try {
             const model = this.vertexAI.getGenerativeModel({
@@ -291,11 +290,10 @@ class GoogleCloudService {
     async initializeCustomer(customerId) {
         console.log(`📁 Initializing customer folder for customer ${customerId}...`);
         if (this.isTestMode) return { success: true };
-        const bucketName = 'maritime-docs';
-        const bucket = this.storage.bucket(bucketName);
-        const [bucketExists] = await bucket.exists();
-        if (!bucketExists) {
-            await bucket.create({ location: this.region, storageClass: 'STANDARD' });
+        const bucket = await this.getCustomerBucket(customerId);
+        if (!bucket) {
+             console.log(`-> Bucket not found, skipping folder initialization.`);
+             return { success: false, message: 'Bucket not found' };
         }
         const initFile = `customer-${customerId}/.init`;
         const [fileExists] = await bucket.file(initFile).exists();
