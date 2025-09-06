@@ -26,13 +26,14 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v29 - Force Region & Final Fix");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v30 - The very final fix, standard region and model");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        this.region = 'asia-northeast3'; // Forcing Seoul region to override environment variables
+        // Reverting to the most standard region and model combination
+        this.region = 'us-central1'; 
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
         
-        console.log(`🌏 Google Cloud Region: ${this.region} (Forced)`);
+        console.log(`🌏 Google Cloud Region: ${this.region} (Final Attempt)`);
         console.log(`🏗️ Project ID: ${this.projectId}`);
         console.log(`🔍 Data Store ID: ${this.dataStoreId}`);
 
@@ -240,7 +241,7 @@ class GoogleCloudService {
         const customerName = `고객사-${customerId}`;
         const systemPrompt = generateSystemPrompt(customerName, context, query);
 
-        const modelName = "gemini-1.5-flash-001"; // Reset to the latest model
+        const modelName = "gemini-pro"; // Using the most stable and generic model name
 
         try {
             const model = this.vertexAI.getGenerativeModel({
