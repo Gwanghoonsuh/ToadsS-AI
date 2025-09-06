@@ -3,13 +3,15 @@ const { PredictionServiceClient } = require('@google-cloud/aiplatform');
 const { generateSystemPrompt, MARITIME_CONTEXT } = require('../prompts/system-prompt');
 
 // Discovery Engine 클라이언트는 조건부로 로드
-let DocumentServiceClient;
+let DocumentServiceClient, SearchServiceClient;
 try {
-    const { DocumentServiceClient: DiscoveryDocumentServiceClient } = require('@google-cloud/discoveryengine').v1;
+    const { DocumentServiceClient: DiscoveryDocumentServiceClient, SearchServiceClient: DiscoverySearchServiceClient } = require('@google-cloud/discoveryengine').v1;
     DocumentServiceClient = DiscoveryDocumentServiceClient;
+    SearchServiceClient = DiscoverySearchServiceClient;
 } catch (error) {
-    console.warn('⚠️ Discovery Engine client not available:', error.message);
+    console.warn('⚠️ Discovery Engine clients not available:', error.message);
     DocumentServiceClient = null;
+    SearchServiceClient = null;
 }
 
 // Vertex AI 클라이언트는 조건부로 로드
@@ -24,7 +26,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v25 - Fix Upload Function");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v26 - Fix Search and Model Errors");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
@@ -61,7 +63,7 @@ class GoogleCloudService {
                 { credentials, projectId: this.projectId } : 
                 { projectId: this.projectId };
 
-            const documentClientConfig = credentials ? 
+            const discoveryClientConfig = credentials ? 
                 { credentials, apiEndpoint: 'global-discoveryengine.googleapis.com' } :
                 { apiEndpoint: 'global-discoveryengine.googleapis.com' };
 
@@ -70,7 +72,10 @@ class GoogleCloudService {
                 this.vertexAI = new VertexAI({ project: this.projectId, location: this.region, googleAuthOptions: credentials ? { credentials } : {} });
             }
             if (DocumentServiceClient) {
-                this.documentClient = new DocumentServiceClient(documentClientConfig);
+                this.documentAdminClient = new DocumentServiceClient(discoveryClientConfig);
+            }
+            if (SearchServiceClient) {
+                this.searchClient = new SearchServiceClient(discoveryClientConfig);
             }
             this.predictionClient = new PredictionServiceClient({ apiEndpoint: `${this.region}-aiplatform.googleapis.com`, ...clientConfig });
 
@@ -132,12 +137,9 @@ class GoogleCloudService {
     }
 
     async addDocumentToDataStore(customerId, fileName) {
-        if (this.isTestMode || !DocumentServiceClient || !this.dataStoreId) {
-            console.log('🔧 Test mode or missing configuration for adding document. Skipping.');
+        if (this.isTestMode) {
             return { success: true, warning: null };
         }
-        // For Cloud Storage data stores, adding the file to the bucket is enough.
-        // The data store will sync automatically. We just return a warning about the delay.
         console.log(`ℹ️ Document ${fileName} was uploaded to Cloud Storage.`);
         console.log(`   - It will be added to the search index automatically. This may take some time.`);
         return {
@@ -158,12 +160,9 @@ class GoogleCloudService {
     }
 
     async removeDocumentFromDataStore(customerId, fileName) {
-        if (this.isTestMode || !DocumentServiceClient || !this.dataStoreId) {
-            console.log('🔧 Test mode or missing configuration for document removal. Skipping.');
+        if (this.isTestMode) {
             return { success: true, warning: null };
         }
-        // For Cloud Storage data stores, removing the file from the bucket is enough.
-        // The data store will sync automatically. We just return a warning about the delay.
         console.log(`ℹ️ Document ${fileName} was deleted from Cloud Storage.`);
         console.log(`   - It will be removed from the search index automatically. This may take some time.`);
         return {
@@ -173,7 +172,7 @@ class GoogleCloudService {
     }
 
     async searchDocuments(customerId, query, maxResults = 5) {
-        if (this.isTestMode || !DocumentServiceClient || !this.dataStoreId) {
+        if (this.isTestMode || !this.searchClient || !this.dataStoreId) {
             console.log('🔧 Test mode or missing configuration for document search. Returning empty results.');
             return [];
         }
@@ -199,7 +198,7 @@ class GoogleCloudService {
                 },
             };
 
-            const [response] = await this.documentClient.search(request);
+            const [response] = await this.searchClient.search(request);
     
             if (!response || !response.results) {
                 console.log('🟡 Search returned no results from Vertex AI Search.');
@@ -241,7 +240,7 @@ class GoogleCloudService {
         const customerName = `고객사-${customerId}`;
         const systemPrompt = generateSystemPrompt(customerName, context, query);
 
-        const modelName = "gemini-1.0-pro";
+        const modelName = "gemini-pro"; // Changed from gemini-1.0-pro
 
         try {
             const model = this.vertexAI.getGenerativeModel({
@@ -276,8 +275,8 @@ class GoogleCloudService {
             
             let fallbackMessage = "An unexpected error occurred while generating the AI response.";
             if (error.message.includes('404') || error.message.includes('Not Found')) {
-                fallbackMessage = "The specified AI model is unavailable in the current region. Please check project billing and API status.";
-                 console.error(`🚨 Model availability issue - This is often caused by a missing billing account on the project.`);
+                fallbackMessage = "The specified AI model is unavailable. Please ensure the project has billing enabled and the Vertex AI API is enabled.";
+                 console.error(`🚨 Model availability issue - This is often caused by a missing billing account on the project or the Vertex AI API not being enabled.`);
             } else if (error.message.includes('quota')) {
                 fallbackMessage = "The service is currently busy due to high demand. Please try again later.";
             } else if (error.message.includes('authentication') || error.message.includes('credentials')) {
