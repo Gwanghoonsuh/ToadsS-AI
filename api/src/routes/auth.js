@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const Joi = require('joi');
 const Customer = require('../models/Customer');
 const UserInfo = require('../models/UserInfo');
+const googleCloudService = require('../services/googleCloudService');
 const router = express.Router();
 
 // Mock user database (in production, use a real database)
@@ -112,6 +113,16 @@ router.post('/login', async (req, res, next) => {
             customer_name: customer.customer_name
         });
 
+        // Initialize customer folder in Google Cloud Storage
+        console.log('📁 Initializing customer folder in Google Cloud Storage...');
+        try {
+            const initResult = await googleCloudService.initializeCustomer(user.customer_id);
+            console.log('✅ Customer folder initialization result:', initResult);
+        } catch (initError) {
+            console.warn('⚠️ Customer folder initialization failed, but continuing login:', initError.message);
+            // 폴더 생성 실패해도 로그인은 계속 진행 (로그인 차단하지 않음)
+        }
+
         // Generate JWT token
         console.log('🔑 Generating JWT token...');
         const token = jwt.sign(
@@ -214,6 +225,16 @@ router.post('/register', async (req, res, next) => {
         });
 
         console.log(`✅ Created new user: ${newUser.username} (ID: ${newUser.id})`);
+
+        // Initialize customer folder in Google Cloud Storage
+        console.log('📁 Initializing customer folder in Google Cloud Storage...');
+        try {
+            const initResult = await googleCloudService.initializeCustomer(customer.id);
+            console.log('✅ Customer folder initialization result:', initResult);
+        } catch (initError) {
+            console.warn('⚠️ Customer folder initialization failed, but continuing registration:', initError.message);
+            // 폴더 생성 실패해도 회원가입은 계속 진행 (등록 차단하지 않음)
+        }
 
         // Generate JWT token
         console.log('🔑 Generating JWT token...');

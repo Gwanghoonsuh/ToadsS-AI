@@ -146,6 +146,60 @@ class GoogleCloudService {
         return bucket;
     }
 
+    async ensureCustomerFolder(customerId) {
+        if (this.isTestMode) {
+            console.log(`🔧 Test mode: Customer folder ${customerId} assumed to exist`);
+            return { success: true, created: false, testMode: true };
+        }
+
+        try {
+            const bucket = await this.getCustomerBucket(customerId);
+            if (!bucket) {
+                throw new Error('Bucket not available');
+            }
+
+            const customerFolder = `${customerId}/`;
+            const placeholderFile = `${customerFolder}.keep`;
+            const file = bucket.file(placeholderFile);
+
+            // 폴더 존재 여부 확인 (폴더 안에 파일이 있는지 확인)
+            const [files] = await bucket.getFiles({ 
+                prefix: customerFolder,
+                maxResults: 1 
+            });
+
+            if (files.length === 0) {
+                // 폴더가 비어있다면 .keep 파일 생성 (GCS는 빈 폴더를 지원하지 않음)
+                console.log(`📁 Creating customer folder: ${customerFolder}`);
+                await file.save('', {
+                    metadata: {
+                        contentType: 'text/plain',
+                        customerId: customerId.toString(),
+                        purpose: 'folder-placeholder',
+                        created: new Date().toISOString()
+                    }
+                });
+                console.log(`✅ Customer folder created: ${customerFolder}`);
+                return { success: true, created: true, folder: customerFolder };
+            } else {
+                console.log(`📁 Customer folder already exists: ${customerFolder}`);
+                return { success: true, created: false, folder: customerFolder };
+            }
+
+        } catch (error) {
+            console.error(`❌ Error ensuring customer folder for customer ${customerId}:`, error);
+            
+            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
+            if (error.message.includes('billing account') && error.message.includes('disabled')) {
+                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
+                this.isTestMode = true;
+                return await this.ensureCustomerFolder(customerId); // 테스트 모드로 재시도
+            }
+            
+            throw new Error(`Failed to ensure customer folder: ${error.message}`);
+        }
+    }
+
     async listFiles(customerId) {
         if (this.isTestMode) {
             console.log('🔧 Test mode: Returning empty file list');
@@ -588,6 +642,56 @@ class GoogleCloudService {
             console.error(`❌ Error removing document from data store: ${error.message}`);
             // 데이터 스토어 삭제 실패는 치명적이지 않음 (파일은 이미 삭제됨)
             return { success: false, error: error.message, warning: 'File deleted but data store cleanup failed' };
+        }
+    }
+
+    // 로그인 시 호출할 초기화 메서드
+    async initializeCustomer(customerId) {
+        if (this.isTestMode) {
+            console.log(`🔧 Test mode: Customer ${customerId} initialized`);
+            return { 
+                success: true, 
+                testMode: true, 
+                bucket: 'test-bucket',
+                folder: `${customerId}/`,
+                message: 'Running in test mode - no actual cloud resources created'
+            };
+        }
+
+        try {
+            console.log(`🚀 Initializing customer ${customerId}...`);
+            
+            // 1. 버킷 확인/생성
+            const bucket = await this.getCustomerBucket(customerId);
+            if (!bucket) {
+                throw new Error('Failed to initialize bucket');
+            }
+
+            // 2. 고객 폴더 확인/생성
+            const folderResult = await this.ensureCustomerFolder(customerId);
+            
+            console.log(`✅ Customer ${customerId} initialized successfully`);
+            return {
+                success: true,
+                bucket: bucket.name,
+                folder: folderResult.folder,
+                folderCreated: folderResult.created,
+                message: folderResult.created ? 
+                    `New customer folder created: ${folderResult.folder}` :
+                    `Customer folder already exists: ${folderResult.folder}`
+            };
+
+        } catch (error) {
+            console.error(`❌ Error initializing customer ${customerId}:`, error);
+            
+            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
+            if (error.message.includes('billing account') && error.message.includes('disabled')) {
+                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
+                this.isTestMode = true;
+                return await this.initializeCustomer(customerId); // 테스트 모드로 재시도
+            }
+            
+            throw new Error(`Failed to initialize customer: ${error.message}`);
         }
     }
 }
