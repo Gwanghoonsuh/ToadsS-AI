@@ -5,7 +5,7 @@
 ## 🚀 프로덕션 환경
 - **사이트**: https://toads-s-ai.vercel.app/
 - **플랫폼**: Vercel
-- **프로젝트 ID**: toadsaiagent-471301
+- **프로젝트 ID**: golden-walker-471308-u6
 
 ## 주요 기능
 
@@ -52,7 +52,7 @@ cd client && npm install
 ```env
 # Google Cloud 설정 (프로덕션)
 GOOGLE_APPLICATION_CREDENTIALS=JSON_CREDENTIALS_STRING
-GOOGLE_CLOUD_PROJECT_ID=toadsaiagent-471301
+GOOGLE_CLOUD_PROJECT_ID=golden-walker-471308-u6
 GOOGLE_CLOUD_REGION=asia-northeast3
 
 # JWT 설정
@@ -151,7 +151,7 @@ Vercel 대시보드에서 다음 변수들을 설정하세요:
 
 ```env
 GOOGLE_APPLICATION_CREDENTIALS={"type":"service_account",...}
-GOOGLE_CLOUD_PROJECT_ID=toadsaiagent-471301
+GOOGLE_CLOUD_PROJECT_ID=golden-walker-471308-u6
 JWT_SECRET=your-production-jwt-secret
 ```
 

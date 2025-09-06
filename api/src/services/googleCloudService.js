@@ -27,7 +27,7 @@ class GoogleCloudService {
         console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v20 - Back to NE3 Region 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
+        this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1'; // 리전을 us-central1로 변경
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
         
         console.log(`🌏 Google Cloud Region: ${this.region}`);
