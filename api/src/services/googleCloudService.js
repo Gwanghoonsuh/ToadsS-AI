@@ -388,9 +388,9 @@ class GoogleCloudService {
                 throw new Error('Failed to generate system prompt');
             }
             
-            // Vertex AI Gemini 1.5 Pro 모델 사용 (안정성과 품질 최적화)
+            // Vertex AI Gemini 1.0 Pro 모델 사용 (안정성과 품질 최적화)
             const model = this.vertexAI.getGenerativeModel({
-                model: "gemini-1.5-pro", // 안정적이고 검증된 Gemini 1.5 Pro 모델
+                model: "gemini-pro", // 안정적인 gemini-pro 모델로 변경
                 systemInstruction: {
                     parts: [{ text: systemPrompt }]
                 },
@@ -424,9 +424,9 @@ class GoogleCloudService {
                 console.warn('⚠️ Primary model failed, trying fallback model...', modelError.message);
                 
                 try {
-                    // Fallback to stable gemini-1.5-flash model (systemInstruction 없이)
+                    // Fallback to stable gemini-pro model (systemInstruction 없이)
                     const fallbackModel = this.vertexAI.getGenerativeModel({
-                        model: "gemini-1.5-flash-001",
+                        model: "gemini-pro", // Fallback도 안정적인 모델로 변경
                         generationConfig: {
                             maxOutputTokens: 2048,
                             temperature: 0.2,
@@ -502,7 +502,7 @@ class GoogleCloudService {
                 console.error(`🚨 Google Auth Error - Project: ${this.projectId}, Region: ${this.region}`);
             } else if (error.message.includes('404') || error.message.includes('Not Found')) {
                 fallbackMessage = "죄송하지만 현재 AI 모델을 사용할 수 없습니다. 지역 설정을 확인하고 있습니다.";
-                console.error(`🚨 Model availability issue - Region: ${this.region}, Model: gemini-1.5-pro`);
+                console.error(`🚨 Model availability issue - Region: ${this.region}, Model: gemini-pro`);
             } else if (error.message.includes('quota')) {
                 fallbackMessage = "죄송하지만 현재 서비스 이용량이 많아 잠시 후 다시 시도해주세요.";
             } else if (error.message.includes('authentication') || error.message.includes('credentials')) {
@@ -571,7 +571,7 @@ class GoogleCloudService {
         }
 
         try {
-            // 메인 공유 버킷 사용 (toads-shipping-ai-docs)
+            // 메인 공유 버킷 사용 (toads-shipping-ai-doc)
             const bucketName = 'toads-shipping-ai-doc';
             const bucket = this.storage.bucket(bucketName);
             
