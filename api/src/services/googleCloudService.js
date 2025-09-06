@@ -43,7 +43,7 @@ class GoogleCloudService {
         }
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
+        this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
 
         // 파싱된 서비스 계정 키를 직접 credentials로 전달
