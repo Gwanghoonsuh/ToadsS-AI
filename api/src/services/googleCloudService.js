@@ -27,7 +27,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v31 - Hardcoded final configuration");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v33 - Fixed Discovery Engine Project ID");
 
         // *** HARDCODED FINAL CONFIGURATION ***
         this.projectId = 'ai-agent-new-471314';
@@ -68,8 +68,8 @@ class GoogleCloudService {
                 { projectId: this.projectId };
 
             const discoveryClientConfig = credentials ? 
-                { credentials, apiEndpoint: 'global-discoveryengine.googleapis.com' } :
-                { apiEndpoint: 'global-discoveryengine.googleapis.com' };
+                { credentials, projectId: this.projectId, apiEndpoint: 'global-discoveryengine.googleapis.com' } :
+                { projectId: this.projectId, apiEndpoint: 'global-discoveryengine.googleapis.com' };
 
             this.storage = new Storage(clientConfig);
             if (VertexAI) {
@@ -240,7 +240,7 @@ class GoogleCloudService {
         const customerName = `고객사-${customerId}`;
         const systemPrompt = generateSystemPrompt(customerName, context, query);
 
-        const modelName = "gemini-pro"; 
+        const modelName = "gemini-1.0-pro"; 
 
         try {
             const model = this.vertexAI.getGenerativeModel({
