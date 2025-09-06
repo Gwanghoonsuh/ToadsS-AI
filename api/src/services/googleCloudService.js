@@ -24,7 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v11 - Billing Account Error Handler 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v12 - Single Bucket Structure 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
@@ -117,7 +117,7 @@ class GoogleCloudService {
             return null;
         }
 
-        const bucketName = `toads-ai-agent-${customerId}`;
+        const bucketName = 'toads-shipping-ai-docs';
         const bucket = this.storage.bucket(bucketName);
 
         try {
@@ -158,7 +158,7 @@ class GoogleCloudService {
                 return [];
             }
 
-            const customerFolder = `customer-${customerId}/`;
+            const customerFolder = `${customerId}/`;
             
             // 고객별 폴더에서만 파일 조회 (데이터 격리)
             const [files] = await bucket.getFiles({ prefix: customerFolder });
@@ -193,7 +193,7 @@ class GoogleCloudService {
                 fileName: `test-${originalName}`,
                 gcsUri: `gs://test-bucket/test-${originalName}`,
                 timestamp: Date.now(),
-                customerFolder: `customer-${customerId}`
+                customerFolder: `${customerId}`
             };
         }
 
@@ -203,10 +203,10 @@ class GoogleCloudService {
                 throw new Error('Bucket not available in test mode');
             }
             
-            // 고객별 폴더 구조 생성: customer-{customerId}/timestamp-randomstring-filename
+            // 고객별 폴더 구조 생성: {customerId}/timestamp-randomstring-filename
             const timestamp = Date.now();
             const randomString = Math.random().toString(36).substring(2, 8);
-            const customerFolder = `customer-${customerId}`;
+            const customerFolder = `${customerId}`;
             const fileName = `${customerFolder}/${timestamp}-${randomString}-${originalName}`;
             const fileUpload = bucket.file(fileName);
 
@@ -260,7 +260,7 @@ class GoogleCloudService {
             const file = bucket.file(fileName);
             
             // 파일이 해당 고객의 폴더에 있는지 확인 (보안)
-            if (!fileName.startsWith(`customer-${customerId}/`)) {
+            if (!fileName.startsWith(`${customerId}/`)) {
                 throw new Error(`Access denied: File does not belong to customer ${customerId}`);
             }
             
@@ -296,7 +296,7 @@ class GoogleCloudService {
                 return [];
             }
 
-            const customerFolder = `customer-${customerId}/`;
+            const customerFolder = `${customerId}/`;
             
             // 고객별 폴더에서만 파일 조회 (데이터 격리 보장)
             const [files] = await bucket.getFiles({ prefix: customerFolder });
@@ -312,7 +312,7 @@ class GoogleCloudService {
             // TODO: 실제 구현에서는 Vertex AI Search나 Embedding을 사용한 의미적 검색 구현
             const searchResults = files.map((file, index) => {
                 const originalName = file.metadata.originalName || file.name;
-                const displayName = originalName.replace(/^customer-\d+\/\d+-[a-z0-9]+-/, '');
+                const displayName = originalName.replace(/^\d+\/\d+-[a-z0-9]+-/, '');
                 
                 return {
                     id: `${customerId}-${index}`,
@@ -328,7 +328,7 @@ class GoogleCloudService {
 
             // 보안 검증: 모든 결과가 해당 고객의 것인지 확인
             const invalidResults = searchResults.filter(result => 
-                !result.fileName.startsWith(`customer-${customerId}/`)
+                !result.fileName.startsWith(`${customerId}/`)
             );
             
             if (invalidResults.length > 0) {
@@ -394,7 +394,7 @@ class GoogleCloudService {
             const customerName = `고객사-${customerId}`;
             
             // 보안 검증: context에 다른 고객 정보가 포함되지 않았는지 확인
-            if (context && context.includes(`customer-`) && !context.includes(`customer-${customerId}`)) {
+            if (context && context.includes(`/`) && !context.includes(`${customerId}/`)) {
                 console.error(`🚨 Security violation: Context contains other customer data for customer ${customerId}`);
                 throw new Error('Access denied: Invalid context data');
             }
