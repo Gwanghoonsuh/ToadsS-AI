@@ -26,7 +26,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v26 - Fix Search and Model Errors");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v27 - Final Model Fix");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
@@ -240,7 +240,7 @@ class GoogleCloudService {
         const customerName = `고객사-${customerId}`;
         const systemPrompt = generateSystemPrompt(customerName, context, query);
 
-        const modelName = "gemini-pro"; // Changed from gemini-1.0-pro
+        const modelName = "gemini-1.5-flash-001"; // Changed to a newer, reliable model
 
         try {
             const model = this.vertexAI.getGenerativeModel({
