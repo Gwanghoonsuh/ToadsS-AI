@@ -24,10 +24,10 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v18 - Gemini 1.5 Pro Stable 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v19 - Gemini 1.5 Pro NE1 Region 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
+        this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast1';
         this.dataStoreId = process.env.VERTEX_AI_DATA_STORE_ID;
         
         console.log(`🌏 Google Cloud Region: ${this.region}`);
@@ -502,7 +502,7 @@ class GoogleCloudService {
                 console.error(`🚨 Google Auth Error - Project: ${this.projectId}, Region: ${this.region}`);
             } else if (error.message.includes('404') || error.message.includes('Not Found')) {
                 fallbackMessage = "죄송하지만 현재 AI 모델을 사용할 수 없습니다. 지역 설정을 확인하고 있습니다.";
-                console.error(`🚨 Model availability issue - Region: ${this.region}, Model: gemini-2.0-flash`);
+                console.error(`🚨 Model availability issue - Region: ${this.region}, Model: gemini-1.5-pro`);
             } else if (error.message.includes('quota')) {
                 fallbackMessage = "죄송하지만 현재 서비스 이용량이 많아 잠시 후 다시 시도해주세요.";
             } else if (error.message.includes('authentication') || error.message.includes('credentials')) {
