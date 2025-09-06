@@ -24,7 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v17 - Gemini 2.0 Flash 001 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v18 - Gemini 1.5 Pro Stable 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
@@ -388,9 +388,9 @@ class GoogleCloudService {
                 throw new Error('Failed to generate system prompt');
             }
             
-            // Vertex AI Gemini 2.0 Flash 모델 사용 (최신 성능 최적화)
+            // Vertex AI Gemini 1.5 Pro 모델 사용 (안정성과 품질 최적화)
             const model = this.vertexAI.getGenerativeModel({
-                model: "gemini-2.0-flash-001", // 안정적인 Gemini 2.0 Flash 버전 001
+                model: "gemini-1.5-pro", // 안정적이고 검증된 Gemini 1.5 Pro 모델
                 systemInstruction: {
                     parts: [{ text: systemPrompt }]
                 },
