@@ -24,7 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v12 - Single Bucket Structure 🚀");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v13 - Permission Error Handling 🚀");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'asia-northeast3';
@@ -133,11 +133,35 @@ class GoogleCloudService {
         } catch (error) {
             console.error(`❌ Error managing bucket ${bucketName}:`, error);
             
-            // 청구 계정 오류 감지 및 자동 테스트 모드 전환
+            // 구체적인 오류 유형별 처리
             if (error.message.includes('billing account') && error.message.includes('disabled')) {
-                console.error('🚨 BILLING ACCOUNT DISABLED: Switching to test mode');
+                console.error('🚨 BILLING ACCOUNT DISABLED: Google Cloud 청구 계정이 비활성화되어 있습니다.');
                 this.isTestMode = true;
-                return null; // 테스트 모드에서는 null 반환
+                return null;
+            }
+            
+            if (error.code === 403) {
+                if (error.message.includes('storage.buckets.get')) {
+                    console.error('🚨 PERMISSION DENIED: 서비스 계정에 Storage 권한이 없습니다.');
+                    console.error('💡 해결 방법:');
+                    console.error('   1. Google Cloud Console → IAM & Admin → IAM');
+                    console.error('   2. 서비스 계정에 "Storage Object Admin" 역할 부여');
+                    console.error('   3. 또는 CLI: gcloud projects add-iam-policy-binding');
+                    console.error(`   4. 체크리스트: ${__dirname}/../claudedocs/google-cloud-setup-checklist.md`);
+                } else {
+                    console.error('🚨 ACCESS DENIED: Google Cloud 접근 권한 문제');
+                }
+                this.isTestMode = true;
+                return null;
+            }
+            
+            if (error.code === 404) {
+                console.error(`🚨 BUCKET NOT FOUND: 버킷 "${bucketName}"이 존재하지 않습니다.`);
+                console.error('💡 해결 방법:');
+                console.error(`   1. Google Cloud Console에서 버킷 생성: ${bucketName}`);
+                console.error(`   2. 또는 CLI: gsutil mb gs://${bucketName}`);
+                this.isTestMode = true;
+                return null;
             }
             
             throw new Error(`Failed to access bucket: ${error.message}`);
