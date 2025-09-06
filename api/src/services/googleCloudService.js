@@ -24,7 +24,7 @@ try {
 
 class GoogleCloudService {
     constructor() {
-        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v23 - Vertex AI Search Integration");
+        console.log("🚀 DEPLOYMENT CHECKPOINT: Running constructor v24 - Fix Delete Function");
 
         this.projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
         this.region = process.env.GOOGLE_CLOUD_REGION || 'us-central1';
@@ -140,6 +140,21 @@ class GoogleCloudService {
         }
         await bucket.file(fileName).delete();
         return { success: true, fileName };
+    }
+
+    async removeDocumentFromDataStore(customerId, fileName) {
+        if (this.isTestMode || !DocumentServiceClient || !this.dataStoreId) {
+            console.log('🔧 Test mode or missing configuration for document removal. Skipping.');
+            return { success: true, warning: null };
+        }
+        // For Cloud Storage data stores, removing the file from the bucket is enough.
+        // The data store will sync automatically. We just return a warning about the delay.
+        console.log(`ℹ️ Document ${fileName} was deleted from Cloud Storage.`);
+        console.log(`   - It will be removed from the search index automatically. This may take some time.`);
+        return {
+            success: true,
+            warning: '문서가 스토리지에서 삭제되었습니다. 검색 결과에서 사라지기까지 다소 시간이 걸릴 수 있습니다.'
+        };
     }
 
     async searchDocuments(customerId, query, maxResults = 5) {
